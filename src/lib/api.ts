@@ -20,12 +20,16 @@ async function apiFetch<T>(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(path, { ...options, headers });
-  const data = await res.json();
+const res = await fetch(path, { ...options, headers });
 
-  if (!res.ok) {
-    throw new Error(data.error || "An unexpected error occurred.");
-  }
+const text = await res.text();
+const data = text ? JSON.parse(text) : {};
+
+if (!res.ok) {
+  throw new Error(data.error || "An unexpected error occurred.");
+}
+
+return data as T;
 
   return data as T;
 }
