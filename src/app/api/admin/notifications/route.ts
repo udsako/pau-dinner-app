@@ -1,12 +1,10 @@
-// src/app/api/admin/notifications/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
-export async function PATCH(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function PATCH(req: NextRequest, context: RouteContext) {
   const user = requireAuth(req);
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
