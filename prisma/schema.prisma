@@ -1,0 +1,109 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  WAITER
+}
+
+enum TableStatus {
+  COLLECTING
+  QUORUM_MET
+  DISPATCHED
+}
+
+enum OrderStatus {
+  PENDING
+  DISPATCHED
+  SERVED
+}
+
+enum NotificationType {
+  LOW_STOCK
+  SOLD_OUT
+  DISPATCHED
+  NEW_ORDER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(WAITER)
+  createdAt DateTime @default(now())
+
+  assignedTables DinnerTable[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  description String?
+  imageUrl    String?
+  quantity    Int      @default(0)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+}
+
+model DinnerTable {
+  id             String      @id @default(cuid())
+  tableNumber    Int         @unique
+  capacity       Int         @default(10)
+  orderedCount   Int         @default(0)
+  status         TableStatus @default(COLLECTING)
+  quorumMetAt    DateTime?
+  dispatchedAt   DateTime?
+  assignedWaiter User?       @relation(fields: [waiterId], references: [id])
+  waiterId       String?
+
+  orders Order[]
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  studentName  String
+  tableId      String
+  tableNumber  Int
+  status       OrderStatus @default(PENDING)
+  specialNotes String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  table DinnerTable @relation(fields: [tableId], references: [id])
+  items OrderItem[]
+
+  @@unique([studentName, tableNumber])
+}
+
+model OrderItem {
+  id           String @id @default(cuid())
+  orderId      String
+  menuItemId   String
+  menuItemName String
+  quantity     Int    @default(1)
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  message   String
+  metadata  Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
