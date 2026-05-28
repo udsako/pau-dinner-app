@@ -4,13 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { checkAndTriggerDispatch, checkStockLevel } from "@/lib/batchDispatch";
 
-// POST /api/orders — Student places an order (no auth required)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { studentName, tableNumber, items, specialNotes } = body;
 
-    // --- Validation ---
     if (!studentName?.trim()) {
       return NextResponse.json({ success: false, error: "Your name is required." }, { status: 400 });
     }
@@ -21,64 +19,67 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Please select at least one food item." }, { status: 400 });
     }
 
-    // --- Check duplicate order ---
-    const existingOrder = await prisma.order.findUnique({
-      where: { studentName_tableNumber: { studentName: studentName.trim(), tableNumber } },
-    });
-    if (existingOrder) {
+    // Check which course is active
+    const courseControl = await prisma.courseControl.findFirst();
+    const activeCourse = courseControl?.activeCourse;
+
+    if (!activeCourse) {
       return NextResponse.json(
-        { success: false, error: `You have already placed an order from Table ${tableNumber}.` },
+        { success: false, error: "Ordering is not open yet. Please wait for the announcement." },
         { status: 409 }
       );
     }
 
-    // --- Fetch table ---
+    // Check if student already ordered this course
+    const existingOrder = await prisma.order.findUnique({
+      where: { studentName_tableNumber_course: { studentName: studentName.trim(), tableNumber, course: activeCourse } },
+    });
+    if (existingOrder) {
+      return NextResponse.json(
+        { success: false, error: `You have already placed your ${activeCourse.toLowerCase()} order.` },
+        { status: 409 }
+      );
+    }
+
     const table = await prisma.dinnerTable.findUnique({ where: { tableNumber } });
     if (!table) {
       return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
     }
-    if (table.status === "DISPATCHED") {
-      return NextResponse.json(
-        { success: false, error: "Orders for your table have already been dispatched. Please speak to a waiter." },
-        { status: 409 }
-      );
-    }
 
-    // --- Validate and decrement each menu item ---
+    // Validate menu items belong to the active course
     const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
-    const menuItems = await prisma.menuItem.findMany({
-      where: { id: { in: menuItemIds } },
-    });
+    const menuItems = await prisma.menuItem.findMany({ where: { id: { in: menuItemIds } } });
 
     for (const menuItem of menuItems) {
+      if (menuItem.course !== activeCourse) {
+        return NextResponse.json(
+          { success: false, error: `"${menuItem.name}" is not available for the current course.` },
+          { status: 409 }
+        );
+      }
       if (!menuItem.isAvailable || menuItem.quantity <= 0) {
         return NextResponse.json(
-          { success: false, error: `"${menuItem.name}" is no longer available. Please refresh and choose another item.` },
+          { success: false, error: `"${menuItem.name}" is no longer available.` },
           { status: 409 }
         );
       }
     }
 
     if (menuItems.length !== menuItemIds.length) {
-      return NextResponse.json({ success: false, error: "One or more selected items were not found." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "One or more items were not found." }, { status: 400 });
     }
 
-    // --- Run everything in a transaction ---
     const order = await prisma.$transaction(async (tx) => {
-      // Decrement quantities
       for (const item of menuItems) {
-        await tx.menuItem.update({
-          where: { id: item.id },
-          data: { quantity: { decrement: 1 } },
-        });
+        await tx.menuItem.update({ where: { id: item.id }, data: { quantity: { decrement: 1 } } });
       }
 
-      // Create order with items
       const newOrder = await tx.order.create({
         data: {
           studentName: studentName.trim(),
           tableNumber,
           tableId: table.id,
+          course: activeCourse,
           specialNotes: specialNotes?.trim() || null,
           status: "PENDING",
           items: {
@@ -92,7 +93,6 @@ export async function POST(req: NextRequest) {
         include: { items: true },
       });
 
-      // Increment table order count
       await tx.dinnerTable.update({
         where: { id: table.id },
         data: { orderedCount: { increment: 1 } },
@@ -101,34 +101,29 @@ export async function POST(req: NextRequest) {
       return newOrder;
     });
 
-    // --- Post-transaction: check stock levels & batch dispatch (outside tx) ---
     for (const itemId of menuItemIds) {
       await checkStockLevel(itemId);
     }
     await checkAndTriggerDispatch(table.id);
 
-    return NextResponse.json(
-      {
-        success: true,
-        order: {
-          id: order.id,
-          studentName: order.studentName,
-          tableNumber: order.tableNumber,
-          status: order.status,
-          specialNotes: order.specialNotes,
-          items: order.items.map((i) => ({ name: i.menuItemName, quantity: i.quantity })),
-          createdAt: order.createdAt,
-        },
+    return NextResponse.json({
+      success: true,
+      order: {
+        id: order.id,
+        studentName: order.studentName,
+        tableNumber: order.tableNumber,
+        course: order.course,
+        status: order.status,
+        items: order.items.map((i) => ({ name: i.menuItemName, quantity: i.quantity })),
+        createdAt: order.createdAt,
       },
-      { status: 201 }
-    );
+    }, { status: 201 });
   } catch (error) {
     console.error("Order error:", error);
     return NextResponse.json({ success: false, error: "Internal server error." }, { status: 500 });
   }
 }
 
-// GET /api/orders — List orders, optionally filter by tableNumber (auth required)
 export async function GET(req: NextRequest) {
   const user = requireAuth(req);
   if (!user) {
@@ -137,10 +132,11 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const tableNumberParam = searchParams.get("tableNumber");
+  const courseParam = searchParams.get("course");
 
-  const where = tableNumberParam
-    ? { tableNumber: parseInt(tableNumberParam) }
-    : {};
+  const where: Record<string, unknown> = {};
+  if (tableNumberParam) where.tableNumber = parseInt(tableNumberParam);
+  if (courseParam) where.course = courseParam;
 
   const orders = await prisma.order.findMany({
     where,
@@ -148,7 +144,6 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
-  // Build summary if filtering by table
   let summary: Record<string, number> = {};
   let tableData = null;
 
@@ -158,7 +153,6 @@ export async function GET(req: NextRequest) {
       where: { tableNumber },
       include: { assignedWaiter: { select: { id: true, name: true, email: true } } },
     });
-
     for (const order of orders) {
       for (const item of order.items) {
         summary[item.menuItemName] = (summary[item.menuItemName] || 0) + item.quantity;

@@ -22,6 +22,7 @@ export default function OrderPage() {
   const [menu, setMenu] = useState<Record<string, MenuItem[]>>({});
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+  const [hasOrdered, setHasOrdered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,8 +34,20 @@ export default function OrderPage() {
         setActiveCourse(course);
 
         if (course) {
+          // Check if student already ordered this course
+          const alreadyOrdered = localStorage.getItem(`pau_dinner_ordered_${course}`);
+          if (alreadyOrdered) {
+            setHasOrdered(true);
+          }
+
           const menuRes: any = await menuAPI.getAll(course);
           setMenu(menuRes.grouped || {});
+
+          // Pre-fill name and table if they ordered before
+          const savedName = localStorage.getItem("pau_dinner_name");
+          const savedTable = localStorage.getItem("pau_dinner_table");
+          if (savedName) setStudentName(savedName);
+          if (savedTable) setTableNumber(savedTable);
         }
       } catch {
         toast.error("Failed to load menu. Please refresh.");
@@ -73,6 +86,12 @@ export default function OrderPage() {
         items: selectedItems.map((id) => ({ menuItemId: id })),
         specialNotes: specialNotes.trim() || undefined,
       });
+
+      // Save to localStorage so they can't reorder same course
+      localStorage.setItem("pau_dinner_name", studentName.trim());
+      localStorage.setItem("pau_dinner_table", String(tableNum));
+      localStorage.setItem(`pau_dinner_ordered_${activeCourse}`, "true");
+
       toast.success("Order placed!");
       router.push(
         `/confirmation?orderId=${res.order.id}&name=${encodeURIComponent(res.order.studentName)}&table=${tableNum}&course=${activeCourse}`
@@ -113,7 +132,14 @@ export default function OrderPage() {
 
       <div style={{ maxWidth: "560px", margin: "0 auto", padding: "0 20px" }}>
 
-        {/* Ordering closed state */}
+        {/* Loading */}
+        {loading && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: "120px", borderRadius: "12px" }} />)}
+          </div>
+        )}
+
+        {/* Ordering closed */}
         {!loading && !activeCourse && (
           <div className="card" style={{ padding: "48px", textAlign: "center", marginBottom: "20px" }}>
             <p style={{ fontSize: "3rem", marginBottom: "16px" }}>⏸</p>
@@ -129,19 +155,55 @@ export default function OrderPage() {
           </div>
         )}
 
-        {/* Active course ordering */}
-        {!loading && activeCourse && (
+        {/* Already ordered this course */}
+        {!loading && activeCourse && hasOrdered && (
+          <div className="card" style={{ padding: "48px", textAlign: "center", marginBottom: "20px" }}>
+            <p style={{ fontSize: "3rem", marginBottom: "16px" }}>✅</p>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color: "#f5f0e8", marginBottom: "12px" }}>
+              You're all set!
+            </h2>
+            <p style={{ color: "#9b93b0", lineHeight: 1.7 }}>
+              You've already placed your{" "}
+              <strong style={{ color: "#c9a84c" }}>{courseInfo?.label}</strong> order.
+            </p>
+            <p style={{ color: "#9b93b0", lineHeight: 1.7, marginTop: "8px" }}>
+              {activeCourse !== "DESSERT"
+                ? `Come back when it's time to order your ${courseInfo?.next}!`
+                : "That's all for tonight. Enjoy your dessert! 🍰"}
+            </p>
+            <p style={{ color: "#c9a84c", fontSize: "0.85rem", marginTop: "16px", fontStyle: "italic" }}>
+              Enjoy your meal! {courseInfo?.emoji}
+            </p>
+          </div>
+        )}
+
+        {/* Active course ordering form */}
+        {!loading && activeCourse && !hasOrdered && (
           <>
             {/* Name + Table */}
             <div className="card" style={{ padding: "24px", marginBottom: "20px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label className="label">Your Full Name *</label>
-                  <input className="input-field" type="text" placeholder="e.g. Adaeze Okonkwo" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
+                  <input
+                    className="input-field"
+                    type="text"
+                    placeholder="e.g. Adaeze Okonkwo"
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label className="label">Table Number *</label>
-                  <input className="input-field" type="number" min="1" max="24" placeholder="1 – 24" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} />
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="1"
+                    max="24"
+                    placeholder="1 – 24"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                  />
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-end" }}>
                   <div style={{ background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "8px", padding: "12px 16px", width: "100%" }}>
@@ -218,10 +280,22 @@ export default function OrderPage() {
             {/* Special notes */}
             <div className="card" style={{ padding: "24px", marginBottom: "24px" }}>
               <label className="label">Special Notes (Optional)</label>
-              <textarea className="input-field" rows={3} placeholder="Allergies, dietary restrictions..." value={specialNotes} onChange={(e) => setSpecialNotes(e.target.value)} style={{ resize: "vertical" }} />
+              <textarea
+                className="input-field"
+                rows={3}
+                placeholder="Allergies, dietary restrictions..."
+                value={specialNotes}
+                onChange={(e) => setSpecialNotes(e.target.value)}
+                style={{ resize: "vertical" }}
+              />
             </div>
 
-            <button className="btn-gold" onClick={handleSubmit} disabled={submitting} style={{ width: "100%", fontSize: "1rem", padding: "16px", opacity: submitting ? 0.7 : 1 }}>
+            <button
+              className="btn-gold"
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{ width: "100%", fontSize: "1rem", padding: "16px", opacity: submitting ? 0.7 : 1 }}
+            >
               {submitting ? "Placing Order..." : `Place My ${courseInfo?.label} Order →`}
             </button>
 
@@ -229,12 +303,6 @@ export default function OrderPage() {
               Your selection is locked in immediately. Food is served on a first-come, first-served basis.
             </p>
           </>
-        )}
-
-        {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: "120px", borderRadius: "12px" }} />)}
-          </div>
         )}
       </div>
     </main>

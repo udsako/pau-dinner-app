@@ -117,7 +117,7 @@ function ConfirmationContent() {
       )}
 
       <p style={{ marginTop: "24px", fontSize: "0.75rem", color: "#9b93b0" }}>
-        Pan-Atlantic University · Final Year Dinner 2025
+        Pan-Atlantic University · Final Year Dinner 2026
       </p>
 
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: "3px", background: "linear-gradient(90deg, transparent, #c9a84c, #e8c97e, #c9a84c, transparent)" }} />

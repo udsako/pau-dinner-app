@@ -142,6 +142,23 @@ h1, h2, h3, h4 {
   color: var(--text-muted);
 }
 
+/* ── Dropdown fix — make options visible on dark background ── */
+select.input-field {
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+select.input-field option {
+  background-color: #160f3a;
+  color: #f5f0e8;
+}
+
+/* Fallback for browsers that ignore option styling */
+option {
+  background-color: #160f3a;
+  color: #f5f0e8;
+}
+
 .label {
   display: block;
   font-size: 0.8rem;
