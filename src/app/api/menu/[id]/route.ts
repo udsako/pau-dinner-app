@@ -36,14 +36,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/menu/[id] — Admin: delete a menu item
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   const user = requireAuth(req, ["ADMIN"]);
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized. Admins only." }, { status: 401 });
   }
 
+  const { id } = await context.params;
+
   try {
-    await prisma.menuItem.delete({ where: { id: params.id } });
+    // Delete related order items first
+    await prisma.orderItem.deleteMany({ where: { menuItemId: id } });
+    // Then delete the menu item
+    await prisma.menuItem.delete({ where: { id } });
     return NextResponse.json({ success: true, message: "Item deleted." });
   } catch {
     return NextResponse.json({ success: false, error: "Item not found." }, { status: 404 });
