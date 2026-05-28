@@ -2,28 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
-type RouteContext = { params: Promise<{ id: string }> };
-
-export async function PATCH(req: NextRequest, context: RouteContext) {
+export async function GET(req: NextRequest) {
   const user = requireAuth(req);
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
   }
 
-  const { id } = await context.params;
+  const { searchParams } = new URL(req.url);
+  const unreadOnly = searchParams.get("unreadOnly") === "true";
+  const type = searchParams.get("type");
 
-  if (id === "read-all") {
-    await prisma.notification.updateMany({ data: { isRead: true } });
-    return NextResponse.json({ success: true, message: "All notifications marked as read." });
-  }
+  const where: Record<string, unknown> = {};
+  if (unreadOnly) where.isRead = false;
+  if (type) where.type = type;
 
-  try {
-    const notification = await prisma.notification.update({
-      where: { id },
-      data: { isRead: true },
-    });
-    return NextResponse.json({ success: true, notification });
-  } catch {
-    return NextResponse.json({ success: false, error: "Notification not found." }, { status: 404 });
-  }
+  const notifications = await prisma.notification.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  const unreadCount = await prisma.notification.count({ where: { isRead: false } });
+
+  return NextResponse.json({ success: true, notifications, unreadCount });
 }

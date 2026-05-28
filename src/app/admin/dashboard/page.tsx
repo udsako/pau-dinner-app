@@ -37,10 +37,12 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Poll every 30s
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  const token = localStorage.getItem("pau_dinner_token");
+  if (!token) return;
+  fetchData();
+  const interval = setInterval(fetchData, 30000);
+  return () => clearInterval(interval);
+}, [fetchData]);
 
   const stats = {
     total: tables.length,
@@ -57,7 +59,7 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{ marginBottom: "40px" }}>
         <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "6px" }}>
-          PAU Final Year Dinner 2025
+          PAU Final Year Dinner 2026
         </p>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "#f5f0e8", marginBottom: "4px" }}>
           Operations Dashboard

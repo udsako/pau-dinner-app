@@ -4,6 +4,7 @@ export type UserRole = "ADMIN" | "WAITER";
 export type TableStatus = "COLLECTING" | "QUORUM_MET" | "DISPATCHED";
 export type OrderStatus = "PENDING" | "DISPATCHED" | "SERVED";
 export type NotificationType = "LOW_STOCK" | "SOLD_OUT" | "DISPATCHED" | "NEW_ORDER";
+export type Course = "STARTER" | "MAIN" | "DESSERT";
 
 export interface User {
   id: string;
@@ -17,6 +18,7 @@ export interface MenuItem {
   id: string;
   name: string;
   category: string;
+  course: Course;
   description?: string;
   imageUrl?: string;
   quantity: number;
@@ -47,6 +49,7 @@ export interface Order {
   studentName: string;
   tableId: string;
   tableNumber: number;
+  course: Course;
   status: OrderStatus;
   specialNotes?: string;
   items: OrderItem[];
@@ -62,8 +65,10 @@ export interface Notification {
   createdAt: string;
 }
 
-export interface TableSummary {
-  [itemName: string]: number;
+export interface CourseControl {
+  id: string;
+  activeCourse: Course | null;
+  updatedAt: string;
 }
 
 export interface AuthUser {

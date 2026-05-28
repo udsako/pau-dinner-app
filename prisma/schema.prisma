@@ -33,6 +33,12 @@ enum NotificationType {
   NEW_ORDER
 }
 
+enum Course {
+  STARTER
+  MAIN
+  DESSERT
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -44,10 +50,18 @@ model User {
   assignedTables DinnerTable[]
 }
 
+model CourseControl {
+  id           String   @id @default(cuid())
+  activeCourse Course?
+  updatedAt    DateTime @updatedAt
+  updatedBy    String?
+}
+
 model MenuItem {
   id          String   @id @default(cuid())
   name        String
   category    String
+  course      Course   @default(MAIN)
   description String?
   imageUrl    String?
   quantity    Int      @default(0)
@@ -77,6 +91,7 @@ model Order {
   studentName  String
   tableId      String
   tableNumber  Int
+  course       Course      @default(MAIN)
   status       OrderStatus @default(PENDING)
   specialNotes String?
   createdAt    DateTime    @default(now())
@@ -85,7 +100,7 @@ model Order {
   table DinnerTable @relation(fields: [tableId], references: [id])
   items OrderItem[]
 
-  @@unique([studentName, tableNumber])
+  @@unique([studentName, tableNumber, course])
 }
 
 model OrderItem {
