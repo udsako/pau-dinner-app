@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
-// GET /api/tables — Overview of all 24 tables (auth required)
 export async function GET(req: NextRequest) {
   const user = requireAuth(req);
   if (!user) {
@@ -15,10 +14,31 @@ export async function GET(req: NextRequest) {
     include: {
       assignedWaiter: { select: { id: true, name: true, email: true } },
       orders: {
-        select: { id: true, studentName: true, status: true, createdAt: true },
+        select: { id: true, studentName: true, status: true, course: true, createdAt: true },
       },
     },
   });
 
-  return NextResponse.json({ success: true, tables });
+  // Add per-course counts to each table
+  const tablesWithCourseCounts = tables.map((table) => {
+    const starterOrders = table.orders.filter((o) => o.course === "STARTER");
+    const mainOrders = table.orders.filter((o) => o.course === "MAIN");
+    const dessertOrders = table.orders.filter((o) => o.course === "DESSERT");
+
+    return {
+      ...table,
+      courseCounts: {
+        STARTER: starterOrders.length,
+        MAIN: mainOrders.length,
+        DESSERT: dessertOrders.length,
+      },
+      courseDispatched: {
+        STARTER: starterOrders.some((o) => o.status === "DISPATCHED"),
+        MAIN: mainOrders.some((o) => o.status === "DISPATCHED"),
+        DESSERT: dessertOrders.some((o) => o.status === "DISPATCHED"),
+      },
+    };
+  });
+
+  return NextResponse.json({ success: true, tables: tablesWithCourseCounts });
 }

@@ -2,9 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { dispatchTable } from "@/lib/batchDispatch";
+import { dispatchTableForCourse } from "@/lib/batchDispatch";
 
-// POST /api/admin/dispatch — Manually dispatch all pending orders for a table
 export async function POST(req: NextRequest) {
   const user = requireAuth(req);
   if (!user) {
@@ -12,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { tableNumber, waiterId } = body;
+  const { tableNumber } = body;
 
   if (!tableNumber) {
     return NextResponse.json({ success: false, error: "tableNumber is required." }, { status: 400 });
@@ -23,37 +22,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
   }
 
-  // Assign waiter if provided
-  if (waiterId) {
-    await prisma.dinnerTable.update({
-      where: { id: table.id },
-      data: { waiterId },
-    });
-  }
+  // Get the active course
+  const courseControl = await prisma.courseControl.findFirst();
+  const activeCourse = courseControl?.activeCourse;
 
-  const result = await dispatchTable(table.id, "MANUAL");
-
-  if (!result.success) {
+  if (!activeCourse) {
     return NextResponse.json(
-      { success: false, error: "No pending orders to dispatch for this table." },
+      { success: false, error: "No course is currently active. Open a course first." },
       { status: 400 }
     );
   }
 
-  // Fetch waiter name if assigned
-  let waiterName = null;
-  if (waiterId) {
-    const waiter = await prisma.user.findUnique({ where: { id: waiterId }, select: { name: true } });
-    waiterName = waiter?.name;
+  const result = await dispatchTableForCourse(table.id, activeCourse, "MANUAL");
+
+  if (!result.success) {
+    return NextResponse.json(
+      { success: false, error: `No pending ${activeCourse.toLowerCase()} orders to dispatch for this table.` },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json({
     success: true,
     dispatched: {
       tableNumber,
+      course: activeCourse,
       orderCount: result.orderCount,
       summary: result.summary,
-      assignedWaiter: waiterName,
     },
   });
 }

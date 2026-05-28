@@ -5,60 +5,75 @@ const QUORUM_THRESHOLD = 7;
 const GRACE_PERIOD_MINUTES = 10;
 
 /**
+ * Get the currently active course from CourseControl
+ */
+async function getActiveCourse(): Promise<string | null> {
+  const control = await prisma.courseControl.findFirst();
+  return control?.activeCourse ?? null;
+}
+
+/**
  * Called after every new order is placed.
- * Checks quorum and potentially triggers auto-dispatch.
+ * Checks quorum for the current course and potentially triggers auto-dispatch.
  */
 export async function checkAndTriggerDispatch(tableId: string): Promise<void> {
+  const activeCourse = await getActiveCourse();
+  if (!activeCourse) return;
+
   const table = await prisma.dinnerTable.findUnique({
     where: { id: tableId },
-    include: { orders: true },
+    include: {
+      orders: { where: { status: "PENDING", course: activeCourse as any } },
+    },
   });
 
-  if (!table || table.status === "DISPATCHED") return;
+  if (!table) return;
 
-  const orderedCount = table.orderedCount;
+  // Count how many people have ordered THIS course at this table
+  const courseOrderCount = await prisma.order.count({
+    where: { tableId, course: activeCourse as any },
+  });
 
-  // If all 10 ordered → immediate dispatch
-  if (orderedCount >= table.capacity) {
-    await dispatchTable(tableId, "AUTO_FULL");
+  // Check if table is already dispatched FOR THIS COURSE
+  const alreadyDispatched = await prisma.order.findFirst({
+    where: { tableId, course: activeCourse as any, status: "DISPATCHED" },
+  });
+  if (alreadyDispatched) return; // already dispatched for this course
+
+  // If all 10 ordered this course → immediate dispatch
+  if (courseOrderCount >= table.capacity) {
+    await dispatchTableForCourse(tableId, activeCourse, "AUTO_FULL");
     return;
   }
 
-  // If quorum just reached → mark it, start grace timer
-  if (orderedCount >= QUORUM_THRESHOLD && table.status === "COLLECTING") {
+  // If quorum just reached → update table status and quorumMetAt
+  if (courseOrderCount >= QUORUM_THRESHOLD && table.status !== "QUORUM_MET") {
     await prisma.dinnerTable.update({
       where: { id: tableId },
-      data: {
-        status: "QUORUM_MET",
-        quorumMetAt: new Date(),
-      },
+      data: { status: "QUORUM_MET", quorumMetAt: new Date() },
     });
-    console.log(`Table ${table.tableNumber}: Quorum reached. Grace period started.`);
   }
 }
 
 /**
- * Dispatch all pending orders for a table.
- * Called by: cron job (grace timer), manual admin action, or auto-full trigger.
+ * Dispatch pending orders for a specific course at a table.
  */
-export async function dispatchTable(
+export async function dispatchTableForCourse(
   tableId: string,
+  course: string,
   trigger: "AUTO_FULL" | "GRACE_TIMER" | "MANUAL"
 ): Promise<{ success: boolean; orderCount: number; summary: Record<string, number> }> {
   const table = await prisma.dinnerTable.findUnique({
     where: { id: tableId },
     include: {
       orders: {
-        where: { status: "PENDING" },
+        where: { status: "PENDING", course: course as any },
         include: { items: true },
       },
     },
   });
 
   if (!table) return { success: false, orderCount: 0, summary: {} };
-  if (table.status === "DISPATCHED" && trigger !== "MANUAL") {
-    return { success: false, orderCount: 0, summary: {} };
-  }
 
   const pendingOrders = table.orders;
   if (pendingOrders.length === 0 && trigger !== "MANUAL") {
@@ -73,28 +88,34 @@ export async function dispatchTable(
     }
   }
 
-  // Update all pending orders to DISPATCHED
+  // Update pending orders for this course to DISPATCHED
   await prisma.order.updateMany({
-    where: { tableId, status: "PENDING" },
+    where: { tableId, course: course as any, status: "PENDING" },
     data: { status: "DISPATCHED" },
   });
 
-  // Update table status
+  // Reset table status to COLLECTING (ready for next course)
   await prisma.dinnerTable.update({
     where: { id: tableId },
     data: {
-      status: "DISPATCHED",
+      status: "COLLECTING",
+      orderedCount: 0,
+      quorumMetAt: null,
       dispatchedAt: new Date(),
     },
   });
 
-  // Create dispatch notification
+  const COURSE_EMOJI: Record<string, string> = {
+    STARTER: "🥗", MAIN: "🍽️", DESSERT: "🍰",
+  };
+
   await prisma.notification.create({
     data: {
       type: "DISPATCHED",
-      message: `Table ${table.tableNumber} dispatched to waiter (${trigger}). ${pendingOrders.length} orders: ${Object.entries(summary).map(([k, v]) => `${v}× ${k}`).join(", ")}`,
+      message: `${COURSE_EMOJI[course] || ""} Table ${table.tableNumber} ${course} dispatched (${trigger}). ${pendingOrders.length} orders: ${Object.entries(summary).map(([k, v]) => `${v}× ${k}`).join(", ")}`,
       metadata: {
         tableNumber: table.tableNumber,
+        course,
         trigger,
         summary,
         orderCount: pendingOrders.length,
@@ -102,33 +123,38 @@ export async function dispatchTable(
     },
   });
 
-  console.log(`Table ${table.tableNumber} dispatched via ${trigger}. ${pendingOrders.length} orders.`);
   return { success: true, orderCount: pendingOrders.length, summary };
 }
 
 /**
- * Cron job function — checks all QUORUM_MET tables and dispatches if grace period expired.
- * Schedule this to run every minute via Vercel Cron.
+ * Kept for backward compatibility — dispatches for the active course
+ */
+export async function dispatchTable(
+  tableId: string,
+  trigger: "AUTO_FULL" | "GRACE_TIMER" | "MANUAL"
+): Promise<{ success: boolean; orderCount: number; summary: Record<string, number> }> {
+  const activeCourse = await getActiveCourse();
+  if (!activeCourse) return { success: false, orderCount: 0, summary: {} };
+  return dispatchTableForCourse(tableId, activeCourse, trigger);
+}
+
+/**
+ * Grace timer — checks QUORUM_MET tables and dispatches if expired
  */
 export async function processGraceTimers(): Promise<void> {
   const graceCutoff = new Date(Date.now() - GRACE_PERIOD_MINUTES * 60 * 1000);
 
   const tablesReadyToDispatch = await prisma.dinnerTable.findMany({
-    where: {
-      status: "QUORUM_MET",
-      quorumMetAt: { lte: graceCutoff },
-    },
+    where: { status: "QUORUM_MET", quorumMetAt: { lte: graceCutoff } },
   });
 
   for (const table of tablesReadyToDispatch) {
-    console.log(`Grace timer expired for Table ${table.tableNumber}. Auto-dispatching...`);
     await dispatchTable(table.id, "GRACE_TIMER");
   }
 }
 
 /**
- * Check a menu item after an order decrements its quantity.
- * Creates notifications for low stock and sold out.
+ * Check stock level after an order and create notifications
  */
 export async function checkStockLevel(menuItemId: string): Promise<void> {
   const item = await prisma.menuItem.findUnique({ where: { id: menuItemId } });
@@ -139,7 +165,6 @@ export async function checkStockLevel(menuItemId: string): Promise<void> {
       where: { id: menuItemId },
       data: { isAvailable: false },
     });
-
     await prisma.notification.create({
       data: {
         type: "SOLD_OUT",
@@ -148,15 +173,13 @@ export async function checkStockLevel(menuItemId: string): Promise<void> {
       },
     });
   } else if (item.quantity <= 5) {
-    // Only notify if we haven't already notified at this level
     const existingAlert = await prisma.notification.findFirst({
       where: {
         type: "LOW_STOCK",
         metadata: { path: ["menuItemId"], equals: item.id },
-        createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }, // within last hour
+        createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
       },
     });
-
     if (!existingAlert) {
       await prisma.notification.create({
         data: {

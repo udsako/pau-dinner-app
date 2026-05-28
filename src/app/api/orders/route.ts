@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Please select at least one food item." }, { status: 400 });
     }
 
-    // Check which course is active
+    // Get active course
     const courseControl = await prisma.courseControl.findFirst();
     const activeCourse = courseControl?.activeCourse;
 
@@ -30,9 +30,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if student already ordered this course
+    // ── Sequential ordering enforcement ──
+    // If MAIN is active → student must have ordered STARTER first
+    // If DESSERT is active → student must have ordered both STARTER and MAIN first
+    const name = studentName.trim();
+
+    if (activeCourse === "MAIN" || activeCourse === "DESSERT") {
+      const requiredPrevious = activeCourse === "MAIN"
+        ? ["STARTER"]
+        : ["STARTER", "MAIN"];
+
+      for (const requiredCourse of requiredPrevious) {
+        const previousOrder = await prisma.order.findFirst({
+          where: { studentName: name, tableNumber, course: requiredCourse as any },
+        });
+        if (!previousOrder) {
+          const courseLabel = requiredCourse === "STARTER" ? "Starter" : "Main Course";
+          return NextResponse.json(
+            { success: false, error: `You need to order your ${courseLabel} before ordering ${activeCourse === "MAIN" ? "the Main Course" : "Dessert"}.` },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
+    // Check duplicate order for this course
     const existingOrder = await prisma.order.findUnique({
-      where: { studentName_tableNumber_course: { studentName: studentName.trim(), tableNumber, course: activeCourse } },
+      where: { studentName_tableNumber_course: { studentName: name, tableNumber, course: activeCourse } },
     });
     if (existingOrder) {
       return NextResponse.json(
@@ -46,14 +70,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
     }
 
-    // Validate menu items belong to the active course
+    // Validate menu items belong to active course
     const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
     const menuItems = await prisma.menuItem.findMany({ where: { id: { in: menuItemIds } } });
 
     for (const menuItem of menuItems) {
       if (menuItem.course !== activeCourse) {
         return NextResponse.json(
-          { success: false, error: `"${menuItem.name}" is not available for the current course.` },
+          { success: false, error: `"${menuItem.name}" is not part of the current course.` },
           { status: 409 }
         );
       }
@@ -76,7 +100,7 @@ export async function POST(req: NextRequest) {
 
       const newOrder = await tx.order.create({
         data: {
-          studentName: studentName.trim(),
+          studentName: name,
           tableNumber,
           tableId: table.id,
           course: activeCourse,
@@ -93,6 +117,7 @@ export async function POST(req: NextRequest) {
         include: { items: true },
       });
 
+      // Only increment table count for current course
       await tx.dinnerTable.update({
         where: { id: table.id },
         data: { orderedCount: { increment: 1 } },
@@ -141,7 +166,7 @@ export async function GET(req: NextRequest) {
   const orders = await prisma.order.findMany({
     where,
     include: { items: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ course: "asc" }, { createdAt: "asc" }],
   });
 
   let summary: Record<string, number> = {};

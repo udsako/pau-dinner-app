@@ -13,14 +13,18 @@ export default function AdminRegister() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
 
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", role: "WAITER" });
+  const [form, setForm] = useState({
+    name: "", email: "", password: "", confirmPassword: "",
+    role: "WAITER", inviteCode: "",
+  });
   const [loading, setLoading] = useState(false);
+  const [showCode, setShowCode] = useState(false);
 
   const handleChange = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleRegister = async () => {
-    if (!form.name || !form.email || !form.password) {
+    if (!form.name || !form.email || !form.password || !form.inviteCode) {
       toast.error("All fields are required.");
       return;
     }
@@ -34,10 +38,16 @@ export default function AdminRegister() {
     }
     setLoading(true);
     try {
-      const res: any = await authAPI.register({ name: form.name, email: form.email, password: form.password, role: form.role });
+      const res: any = await authAPI.register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
+        inviteCode: form.inviteCode,
+      });
       setAuth(res.user as AuthUser, res.token);
       toast.success("Account created! Welcome.");
-      router.push("/admin/dashboard");
+      router.push(res.user.role === "ADMIN" ? "/admin/dashboard" : "/admin/waiter");
     } catch (err: any) {
       toast.error(err.message || "Registration failed.");
       setLoading(false);
@@ -53,56 +63,92 @@ export default function AdminRegister() {
 
       <div className="card animate-in" style={{ maxWidth: "440px", width: "100%", padding: "40px" }}>
         <div style={{ textAlign: "center", marginBottom: "32px" }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "50%",
+            background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 16px", fontSize: "24px",
+          }}>🔐</div>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "6px" }}>
             Staff Portal
           </p>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.8rem", color: "#f5f0e8" }}>
-            Create Account
+            Create Staff Account
           </h1>
           <p style={{ color: "#9b93b0", fontSize: "0.85rem", marginTop: "8px" }}>
-            Must use your <strong style={{ color: "#c9a84c" }}>@pau.edu.ng</strong> email
+            You need a staff access code to register
           </p>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
           <div>
             <label className="label">Full Name</label>
-            <input className="input-field" type="text" placeholder="Jane Doe" value={form.name} onChange={(e) => handleChange("name", e.target.value)} />
+            <input className="input-field" type="text" placeholder="Jane Doe"
+              value={form.name} onChange={(e) => handleChange("name", e.target.value)} />
           </div>
           <div>
-            <label className="label">PAU Email</label>
-            <input className="input-field" type="email" placeholder="janedoe@pau.edu.ng" value={form.email} onChange={(e) => handleChange("email", e.target.value)} />
+            <label className="label">Email Address</label>
+            <input className="input-field" type="email" placeholder="your@email.com"
+              value={form.email} onChange={(e) => handleChange("email", e.target.value)} />
           </div>
           <div>
             <label className="label">Role</label>
-            <select
-              className="input-field"
-              value={form.role}
-              onChange={(e) => handleChange("role", e.target.value)}
-              style={{ cursor: "pointer" }}
-            >
+            <select className="input-field" value={form.role}
+              onChange={(e) => handleChange("role", e.target.value)} style={{ cursor: "pointer" }}>
               <option value="WAITER">Waiter</option>
               <option value="ADMIN">Admin</option>
             </select>
           </div>
           <div>
             <label className="label">Password</label>
-            <input className="input-field" type="password" placeholder="Min. 8 characters" value={form.password} onChange={(e) => handleChange("password", e.target.value)} />
+            <input className="input-field" type="password" placeholder="Min. 8 characters"
+              value={form.password} onChange={(e) => handleChange("password", e.target.value)} />
           </div>
           <div>
             <label className="label">Confirm Password</label>
-            <input className="input-field" type="password" placeholder="Repeat password" value={form.confirmPassword} onChange={(e) => handleChange("confirmPassword", e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRegister()} />
+            <input className="input-field" type="password" placeholder="Repeat password"
+              value={form.confirmPassword} onChange={(e) => handleChange("confirmPassword", e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Staff Access Code</label>
+            <div style={{ position: "relative" }}>
+              <input
+                className="input-field"
+                type={showCode ? "text" : "password"}
+                placeholder="Enter the code given to you"
+                value={form.inviteCode}
+                onChange={(e) => handleChange("inviteCode", e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                style={{ paddingRight: "48px" }}
+              />
+              <button
+                onClick={() => setShowCode(!showCode)}
+                style={{
+                  position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "#9b93b0", fontSize: "16px",
+                }}
+              >
+                {showCode ? "🙈" : "👁️"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginTop: "6px" }}>
+              Don't have a code? Contact the event organiser.
+            </p>
           </div>
         </div>
 
-        <button className="btn-gold" onClick={handleRegister} disabled={loading} style={{ width: "100%", fontSize: "0.95rem", padding: "14px", opacity: loading ? 0.7 : 1 }}>
+        <button className="btn-gold" onClick={handleRegister} disabled={loading}
+          style={{ width: "100%", fontSize: "0.95rem", padding: "14px", opacity: loading ? 0.7 : 1 }}>
           {loading ? "Creating account..." : "Create Account →"}
         </button>
 
         <div style={{ textAlign: "center", marginTop: "20px" }}>
           <p style={{ fontSize: "0.82rem", color: "#9b93b0" }}>
             Already have an account?{" "}
-            <Link href="/admin/login" style={{ color: "#c9a84c", textDecoration: "none", fontWeight: 500 }}>Log in</Link>
+            <Link href="/admin/login" style={{ color: "#c9a84c", textDecoration: "none", fontWeight: 500 }}>
+              Log in
+            </Link>
           </p>
         </div>
       </div>
