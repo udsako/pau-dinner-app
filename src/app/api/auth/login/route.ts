@@ -15,11 +15,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Invalid email or password." },
+        { success: false, error: "Incorrect email or password. Please try again." },
         { status: 401 }
       );
     }
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
     const passwordMatch = await comparePassword(password, user.password);
     if (!passwordMatch) {
       return NextResponse.json(
-        { success: false, error: "Invalid email or password." },
+        { success: false, error: "Incorrect email or password. Please try again." },
         { status: 401 }
       );
     }
@@ -41,6 +43,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Login error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error." }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }
