@@ -4,7 +4,7 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "PAU Final Year Dinner 2025",
+  title: "PAU Final Year Dinner 2026",
   description: "Food ordering system for Pan-Atlantic University's Final Year Dinner",
 };
 
