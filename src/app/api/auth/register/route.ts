@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, signToken } from "@/lib/auth";
 
-const STAFF_INVITE_CODE = process.env.STAFF_INVITE_CODE || "pau2026dinner";
+const STAFF_INVITE_CODE = process.env.STAFF_INVITE_CODE || "pAu2026Dinner";
 
 export async function POST(req: NextRequest) {
   try {
