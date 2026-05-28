@@ -32,7 +32,7 @@ async function apiFetch<T>(
 }
 
 export const authAPI = {
-  register: (body: { name: string; email: string; password: string; role?: string }) =>
+  register: (body: { name: string; email: string; password: string; role?: string; inviteCode?: string }) =>
     apiFetch("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (body: { email: string; password: string }) =>
     apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify(body) }),

@@ -1,12 +1,14 @@
 // src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, isPAUEmail, signToken } from "@/lib/auth";
+import { hashPassword, signToken } from "@/lib/auth";
+
+const STAFF_INVITE_CODE = process.env.STAFF_INVITE_CODE || "pau2026dinner";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, password, role } = body;
+    const { name, email, password, role, inviteCode } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -15,10 +17,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!isPAUEmail(email)) {
+    if (!inviteCode || inviteCode !== STAFF_INVITE_CODE) {
       return NextResponse.json(
-        { success: false, error: "Email must be a PAU email address ending in @pau.edu.ng" },
-        { status: 400 }
+        { success: false, error: "Invalid staff access code. Please contact the event organiser." },
+        { status: 403 }
       );
     }
 
@@ -34,11 +36,11 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await hashPassword(password);
 
-    // If account exists, update role and password instead of erroring
     const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
     let user;
     if (existing) {
+      // Update role and password if account already exists
       user = await prisma.user.update({
         where: { email: email.toLowerCase() },
         data: { name, password: hashedPassword, role: userRole },
