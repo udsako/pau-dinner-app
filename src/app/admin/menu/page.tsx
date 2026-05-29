@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { menuAPI, courseAPI } from "@/lib/api";
 import type { MenuItem, Course } from "@/types";
 
-const CATEGORIES = ["Soup", "Salad", "Main Course", "Side Dish", "Drink", "Dessert", "Snack", "Other"];
+const CATEGORIES = ["Soup", "Starter", "Salad", "Main Course", "Side Dish", "Drink", "Dessert", "Snack", "Other"];
 const COURSES: Course[] = ["STARTER", "MAIN", "DESSERT"];
 
 const COURSE_CONFIG: Record<Course, { label: string; emoji: string; color: string; bg: string; border: string }> = {
