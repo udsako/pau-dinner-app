@@ -103,10 +103,8 @@ export async function POST(req: NextRequest) {
           status: "PENDING",
           items: {
             create: menuItems.map((menuItem) => {
-              // Find the variant chosen for this item
               const itemInput = items.find((i: any) => i.menuItemId === menuItem.id);
               const variant = itemInput?.variant;
-              // Store as "Jollof Rice (Chicken)" if variant chosen
               const displayName = variant ? `${menuItem.name} (${variant})` : menuItem.name;
               return {
                 menuItemId: menuItem.id,
@@ -125,6 +123,15 @@ export async function POST(req: NextRequest) {
       });
 
       return newOrder;
+    });
+
+    // Notify dashboard of new order
+    await prisma.notification.create({
+      data: {
+        type: "NEW_ORDER",
+        message: `📋 New order from Table ${tableNumber} — ${name} (${activeCourse.charAt(0) + activeCourse.slice(1).toLowerCase()})`,
+        metadata: { tableNumber, studentName: name, course: activeCourse },
+      },
     });
 
     for (const itemId of menuItemIds) {
