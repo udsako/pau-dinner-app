@@ -22,6 +22,7 @@ export interface MenuItem {
   description?: string;
   imageUrl?: string;
   quantity: number;
+  variants: string[];
   isAvailable: boolean;
 }
 

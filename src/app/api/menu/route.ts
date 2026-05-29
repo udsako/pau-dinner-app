@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, category, course, description, imageUrl, quantity } = body;
+  const { name, category, course, description, imageUrl, quantity, variants } = body;
 
   if (!name || !category || quantity === undefined) {
     return NextResponse.json(
@@ -44,17 +44,18 @@ export async function POST(req: NextRequest) {
   const itemCourse = course && validCourses.includes(course) ? course : "MAIN";
 
   const item = await prisma.menuItem.create({
-  data: {
-    name,
-    category,
-    course: itemCourse,
-    description: description || null,
-    imageUrl: imageUrl || null,
-    quantity: parseInt(quantity),
-    originalQuantity: parseInt(quantity),  // ← ADD THIS
-    isAvailable: parseInt(quantity) > 0,
-  },
-});
+    data: {
+      name,
+      category,
+      course: itemCourse,
+      description: description || null,
+      imageUrl: imageUrl || null,
+      quantity: parseInt(quantity),
+      originalQuantity: parseInt(quantity),
+      variants: Array.isArray(variants) ? variants : [],
+      isAvailable: parseInt(quantity) > 0,
+    },
+  });
 
   return NextResponse.json({ success: true, item }, { status: 201 });
 }

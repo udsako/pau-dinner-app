@@ -15,7 +15,10 @@ const COURSE_CONFIG: Record<Course, { label: string; emoji: string; color: strin
   DESSERT: { label: "Dessert", emoji: "🍰", color: "#a78bfa", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.3)" },
 };
 
-const EMPTY_FORM = { name: "", category: "Main Course", course: "MAIN" as Course, description: "", quantity: "", imageUrl: "" };
+const EMPTY_FORM = {
+  name: "", category: "Main Course", course: "MAIN" as Course,
+  description: "", quantity: "", imageUrl: "", variantInput: "",
+};
 
 export default function MenuPage() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -23,6 +26,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [variants, setVariants] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingCourse, setTogglingCourse] = useState(false);
@@ -59,6 +63,16 @@ export default function MenuPage() {
   const handleChange = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const addVariant = () => {
+    const v = form.variantInput.trim();
+    if (!v) return;
+    if (variants.includes(v)) { toast.error("Option already added."); return; }
+    setVariants((prev) => [...prev, v]);
+    setForm((prev) => ({ ...prev, variantInput: "" }));
+  };
+
+  const removeVariant = (v: string) => setVariants((prev) => prev.filter((x) => x !== v));
+
   const handleSave = async () => {
     if (!form.name || !form.quantity) {
       toast.error("Name and quantity are required.");
@@ -66,16 +80,18 @@ export default function MenuPage() {
     }
     setSaving(true);
     try {
+      const payload = { ...form, variants };
       if (editingId) {
-        await menuAPI.update(editingId, form);
+        await menuAPI.update(editingId, payload);
         toast.success("Item updated.");
       } else {
-        await menuAPI.create(form);
+        await menuAPI.create(payload);
         toast.success("Item added to menu.");
       }
       setShowForm(false);
       setEditingId(null);
       setForm(EMPTY_FORM);
+      setVariants([]);
       fetchData();
     } catch (err: any) {
       toast.error(err.message || "Failed to save.");
@@ -92,7 +108,9 @@ export default function MenuPage() {
       description: item.description || "",
       quantity: String(item.quantity),
       imageUrl: item.imageUrl || "",
+      variantInput: "",
     });
+    setVariants(item.variants || []);
     setEditingId(item.id);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -127,43 +145,31 @@ export default function MenuPage() {
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "6px" }}>Management</p>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.2rem", color: "#f5f0e8" }}>Menu & Course Control</h1>
         </div>
-        <button className="btn-gold" onClick={() => { setShowForm(!showForm); setEditingId(null); setForm(EMPTY_FORM); }}>
+        <button className="btn-gold" onClick={() => { setShowForm(!showForm); setEditingId(null); setForm(EMPTY_FORM); setVariants([]); }}>
           {showForm ? "Cancel" : "+ Add Item"}
         </button>
       </div>
 
-      {/* ── Course Control Panel ── */}
+      {/* Course Control Panel */}
       <div className="card" style={{ padding: "24px", marginBottom: "32px" }}>
         <div style={{ marginBottom: "16px" }}>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#f5f0e8", marginBottom: "4px" }}>
-            Course Control
-          </h2>
-          <p style={{ fontSize: "0.82rem", color: "#9b93b0" }}>
-            Toggle which course students can currently order from. Only one course can be active at a time.
-          </p>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#f5f0e8", marginBottom: "4px" }}>Course Control</h2>
+          <p style={{ fontSize: "0.82rem", color: "#9b93b0" }}>Toggle which course students can currently order from. Only one course can be active at a time.</p>
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
           {COURSES.map((course) => {
             const config = COURSE_CONFIG[course];
             const isActive = activeCourse === course;
             return (
-              <button
-                key={course}
-                onClick={() => handleSetCourse(course)}
-                disabled={togglingCourse}
-                style={{
-                  padding: "16px", borderRadius: "10px", border: "none", cursor: "pointer",
-                  background: isActive ? config.bg : "rgba(255,255,255,0.04)",
-                  outline: isActive ? `2px solid ${config.border}` : "2px solid transparent",
-                  transition: "all 0.2s ease", opacity: togglingCourse ? 0.7 : 1,
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
-                }}
-              >
+              <button key={course} onClick={() => handleSetCourse(course)} disabled={togglingCourse} style={{
+                padding: "16px", borderRadius: "10px", border: "none", cursor: "pointer",
+                background: isActive ? config.bg : "rgba(255,255,255,0.04)",
+                outline: isActive ? `2px solid ${config.border}` : "2px solid transparent",
+                transition: "all 0.2s ease", opacity: togglingCourse ? 0.7 : 1,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+              }}>
                 <span style={{ fontSize: "28px" }}>{config.emoji}</span>
-                <span style={{ fontWeight: 600, color: isActive ? config.color : "#9b93b0", fontSize: "0.85rem" }}>
-                  {config.label}
-                </span>
+                <span style={{ fontWeight: 600, color: isActive ? config.color : "#9b93b0", fontSize: "0.85rem" }}>{config.label}</span>
                 <span style={{
                   fontSize: "0.68rem", padding: "3px 10px", borderRadius: "20px",
                   background: isActive ? `${config.color}22` : "rgba(255,255,255,0.05)",
@@ -177,19 +183,14 @@ export default function MenuPage() {
             );
           })}
         </div>
-
         {activeCourse && (
           <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
-            <button
-              onClick={() => handleSetCourse(null)}
-              disabled={togglingCourse}
-              style={{
-                background: "rgba(224,82,82,0.1)", color: "#e05252",
-                border: "1px solid rgba(224,82,82,0.3)", borderRadius: "8px",
-                padding: "8px 20px", cursor: "pointer", fontSize: "0.82rem",
-                fontFamily: "var(--font-body)", fontWeight: 500,
-              }}
-            >
+            <button onClick={() => handleSetCourse(null)} disabled={togglingCourse} style={{
+              background: "rgba(224,82,82,0.1)", color: "#e05252",
+              border: "1px solid rgba(224,82,82,0.3)", borderRadius: "8px",
+              padding: "8px 20px", cursor: "pointer", fontSize: "0.82rem",
+              fontFamily: "var(--font-body)", fontWeight: 500,
+            }}>
               ⏸ Pause All Ordering
             </button>
           </div>
@@ -227,12 +228,68 @@ export default function MenuPage() {
               <label className="label">Description (optional)</label>
               <input className="input-field" type="text" placeholder="Short description shown to students" value={form.description} onChange={(e) => handleChange("description", e.target.value)} />
             </div>
+
+            {/* Variants / sub-options */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label className="label">Sub-options / Variants (optional)</label>
+              <p style={{ fontSize: "0.78rem", color: "#9b93b0", marginBottom: "10px" }}>
+                Add options students must pick from — e.g. "Chicken", "Fish", "Assorted Meat" for Jollof Rice.
+                Students must pick exactly one.
+              </p>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+                <input
+                  className="input-field"
+                  type="text"
+                  placeholder='Type an option e.g. "Chicken" then click Add'
+                  value={form.variantInput}
+                  onChange={(e) => handleChange("variantInput", e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addVariant())}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  onClick={addVariant}
+                  type="button"
+                  style={{
+                    background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)",
+                    borderRadius: "8px", padding: "0 16px", cursor: "pointer", color: "#c9a84c",
+                    fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.85rem", whiteSpace: "nowrap",
+                  }}
+                >
+                  + Add
+                </button>
+              </div>
+              {variants.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {variants.map((v) => (
+                    <div key={v} style={{
+                      display: "flex", alignItems: "center", gap: "6px",
+                      background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)",
+                      borderRadius: "20px", padding: "4px 12px",
+                    }}>
+                      <span style={{ fontSize: "0.82rem", color: "#e8c97e" }}>{v}</span>
+                      <button
+                        onClick={() => removeVariant(v)}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9b93b0", fontSize: "14px", lineHeight: 1, padding: "0 2px" }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {variants.length === 0 && (
+                <p style={{ fontSize: "0.75rem", color: "#9b93b0", fontStyle: "italic" }}>
+                  No sub-options added — students will just select this item directly.
+                </p>
+              )}
+            </div>
           </div>
+
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
             <button className="btn-gold" onClick={handleSave} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
               {saving ? "Saving..." : editingId ? "Update Item" : "Add Item"}
             </button>
-            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</button>
+            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditingId(null); setVariants([]); }}>Cancel</button>
           </div>
         </div>
       )}
@@ -262,7 +319,6 @@ export default function MenuPage() {
 
           return (
             <div key={course} style={{ marginBottom: "40px" }}>
-              {/* Course header */}
               <div style={{
                 display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px",
                 padding: "12px 16px", borderRadius: "10px",
@@ -276,8 +332,7 @@ export default function MenuPage() {
                 <span style={{
                   fontSize: "0.68rem", padding: "3px 10px", borderRadius: "20px",
                   background: isActive ? `${config.color}22` : "rgba(255,255,255,0.05)",
-                  color: isActive ? config.color : "#9b93b0",
-                  fontWeight: 700, letterSpacing: "0.06em",
+                  color: isActive ? config.color : "#9b93b0", fontWeight: 700, letterSpacing: "0.06em",
                 }}>
                   {isActive ? "● OPEN" : "CLOSED"}
                 </span>
@@ -292,13 +347,28 @@ export default function MenuPage() {
                     {items.map((item) => (
                       <div key={item.id} className="card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: "14px", opacity: item.isAvailable ? 1 : 0.5 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px", flexWrap: "wrap" }}>
                             <p style={{ fontWeight: 500, color: "#f5f0e8" }}>{item.name}</p>
                             {!item.isAvailable && <span className="badge badge-collecting">Disabled</span>}
                             {item.quantity <= 5 && item.quantity > 0 && item.isAvailable && <span className="badge badge-quorum">Low stock</span>}
                             {item.quantity === 0 && <span style={{ fontSize: "0.7rem", color: "#e05252", background: "rgba(224,82,82,0.1)", padding: "2px 8px", borderRadius: "10px" }}>Sold out</span>}
                           </div>
                           {item.description && <p style={{ fontSize: "0.78rem", color: "#9b93b0" }}>{item.description}</p>}
+                          {/* Show variants if any */}
+                          {item.variants && item.variants.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+                              <span style={{ fontSize: "0.68rem", color: "#9b93b0", marginRight: "4px" }}>Options:</span>
+                              {item.variants.map((v) => (
+                                <span key={v} style={{
+                                  fontSize: "0.68rem", color: "#c9a84c",
+                                  background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)",
+                                  borderRadius: "10px", padding: "1px 8px",
+                                }}>
+                                  {v}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div style={{ textAlign: "center", minWidth: "52px" }}>
@@ -308,15 +378,12 @@ export default function MenuPage() {
 
                         <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                           <button className="btn-ghost" onClick={() => handleEdit(item)} style={{ fontSize: "0.75rem", padding: "5px 10px" }}>Edit</button>
-                          <button
-                            onClick={() => handleToggle(item)}
-                            style={{
-                              padding: "5px 10px", borderRadius: "8px", border: "none", cursor: "pointer",
-                              background: item.isAvailable ? "rgba(224,82,82,0.1)" : "rgba(52,211,153,0.1)",
-                              color: item.isAvailable ? "#e05252" : "#34d399",
-                              fontSize: "0.75rem", fontFamily: "var(--font-body)",
-                            }}
-                          >
+                          <button onClick={() => handleToggle(item)} style={{
+                            padding: "5px 10px", borderRadius: "8px", border: "none", cursor: "pointer",
+                            background: item.isAvailable ? "rgba(224,82,82,0.1)" : "rgba(52,211,153,0.1)",
+                            color: item.isAvailable ? "#e05252" : "#34d399",
+                            fontSize: "0.75rem", fontFamily: "var(--font-body)",
+                          }}>
                             {item.isAvailable ? "Disable" : "Enable"}
                           </button>
                           <button className="btn-danger" onClick={() => handleDelete(item.id, item.name)} style={{ fontSize: "0.75rem", padding: "5px 10px" }}>

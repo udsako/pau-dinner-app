@@ -30,16 +30,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Sequential ordering enforcement ──
-    // If MAIN is active → student must have ordered STARTER first
-    // If DESSERT is active → student must have ordered both STARTER and MAIN first
+    // Sequential ordering enforcement
     const name = studentName.trim();
 
     if (activeCourse === "MAIN" || activeCourse === "DESSERT") {
-      const requiredPrevious = activeCourse === "MAIN"
-        ? ["STARTER"]
-        : ["STARTER", "MAIN"];
-
+      const requiredPrevious = activeCourse === "MAIN" ? ["STARTER"] : ["STARTER", "MAIN"];
       for (const requiredCourse of requiredPrevious) {
         const previousOrder = await prisma.order.findFirst({
           where: { studentName: name, tableNumber, course: requiredCourse as any },
@@ -70,8 +65,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
     }
 
-    // Validate menu items belong to active course
-    const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
+    // Validate menu items
+    const menuItemIds = items.map((i: { menuItemId: string; variant?: string }) => i.menuItemId);
     const menuItems = await prisma.menuItem.findMany({ where: { id: { in: menuItemIds } } });
 
     for (const menuItem of menuItems) {
@@ -107,17 +102,23 @@ export async function POST(req: NextRequest) {
           specialNotes: specialNotes?.trim() || null,
           status: "PENDING",
           items: {
-            create: menuItems.map((item) => ({
-              menuItemId: item.id,
-              menuItemName: item.name,
-              quantity: 1,
-            })),
+            create: menuItems.map((menuItem) => {
+              // Find the variant chosen for this item
+              const itemInput = items.find((i: any) => i.menuItemId === menuItem.id);
+              const variant = itemInput?.variant;
+              // Store as "Jollof Rice (Chicken)" if variant chosen
+              const displayName = variant ? `${menuItem.name} (${variant})` : menuItem.name;
+              return {
+                menuItemId: menuItem.id,
+                menuItemName: displayName,
+                quantity: 1,
+              };
+            }),
           },
         },
         include: { items: true },
       });
 
-      // Only increment table count for current course
       await tx.dinnerTable.update({
         where: { id: table.id },
         data: { orderedCount: { increment: 1 } },

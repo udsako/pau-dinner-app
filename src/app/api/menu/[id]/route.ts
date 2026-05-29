@@ -14,7 +14,7 @@ export async function PATCH(
 
   const { id } = await context.params;
   const body = await req.json();
-  const { name, category, course, description, imageUrl, quantity, isAvailable } = body;
+  const { name, category, course, description, imageUrl, quantity, isAvailable, variants } = body;
 
   const updateData: Record<string, unknown> = {};
   if (name !== undefined) updateData.name = name;
@@ -23,17 +23,15 @@ export async function PATCH(
   if (description !== undefined) updateData.description = description;
   if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
   if (quantity !== undefined) {
-  updateData.quantity = parseInt(quantity);
-  updateData.originalQuantity = parseInt(quantity);  // ← ADD THIS
-  updateData.isAvailable = parseInt(quantity) > 0;
-}
+    updateData.quantity = parseInt(quantity);
+    updateData.originalQuantity = parseInt(quantity);
+    updateData.isAvailable = parseInt(quantity) > 0;
+  }
   if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
+  if (variants !== undefined) updateData.variants = Array.isArray(variants) ? variants : [];
 
   try {
-    const item = await prisma.menuItem.update({
-      where: { id },
-      data: updateData,
-    });
+    const item = await prisma.menuItem.update({ where: { id }, data: updateData });
     return NextResponse.json({ success: true, item });
   } catch {
     return NextResponse.json({ success: false, error: "Item not found." }, { status: 404 });
