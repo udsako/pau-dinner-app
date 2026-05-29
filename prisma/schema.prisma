@@ -51,25 +51,25 @@ model User {
 }
 
 model CourseControl {
-  id           String   @id @default(cuid())
-  activeCourse Course?
-  updatedAt    DateTime @updatedAt
-  updatedBy    String?
+  id             String   @id @default(cuid())
+  openCourses    String[] @default([]) // ["STARTER", "MAIN"] etc
+  updatedAt      DateTime @updatedAt
+  updatedBy      String?
 }
 
 model MenuItem {
-  id          String   @id @default(cuid())
-  name        String
-  category    String
-  course      Course   @default(MAIN)
-  description String?
-  imageUrl    String?
-  quantity    Int      @default(0)
+  id               String   @id @default(cuid())
+  name             String
+  category         String
+  course           Course   @default(MAIN)
+  description      String?
+  imageUrl         String?
+  quantity         Int      @default(0)
   originalQuantity Int      @default(0)
   variants         String[] @default([])
-  isAvailable Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isAvailable      Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   orderItems OrderItem[]
 }
