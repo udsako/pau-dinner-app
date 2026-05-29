@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { tablesAPI, adminAPI } from "@/lib/api";
 import type { DinnerTable, Notification } from "@/types";
 
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -37,12 +39,35 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-  const token = localStorage.getItem("pau_dinner_token");
-  if (!token) return;
-  fetchData();
-  const interval = setInterval(fetchData, 30000);
-  return () => clearInterval(interval);
-}, [fetchData]);
+    const token = localStorage.getItem("pau_dinner_token");
+    if (!token) return;
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const handleReset = async () => {
+    if (!confirm("⚠️ This will delete ALL orders, reset all tables to 0/10, and restore all menu quantities. Are you sure?")) return;
+    setResetting(true);
+    try {
+      const token = localStorage.getItem("pau_dinner_token");
+      const res = await fetch("/api/admin/reset", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        fetchData();
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Reset failed.");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const stats = {
     total: tables.length,
@@ -61,17 +86,37 @@ export default function Dashboard() {
         <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "6px" }}>
           PAU Final Year Dinner 2026
         </p>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "#f5f0e8", marginBottom: "4px" }}>
-          Operations Dashboard
-        </h1>
-        <p style={{ color: "#9b93b0", fontSize: "0.875rem" }}>
-          Auto-refreshes every 30 seconds
-          {unreadCount > 0 && (
-            <Link href="/admin/notifications" style={{ marginLeft: "12px", color: "#fbbf24", fontWeight: 500, textDecoration: "none" }}>
-              ⚠ {unreadCount} unread alert{unreadCount !== 1 ? "s" : ""}
-            </Link>
-          )}
-        </p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+          <div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "#f5f0e8", marginBottom: "4px" }}>
+              Operations Dashboard
+            </h1>
+            <p style={{ color: "#9b93b0", fontSize: "0.875rem" }}>
+              Auto-refreshes every 30 seconds
+              {unreadCount > 0 && (
+                <Link href="/admin/notifications" style={{ marginLeft: "12px", color: "#fbbf24", fontWeight: 500, textDecoration: "none" }}>
+                  ⚠ {unreadCount} unread alert{unreadCount !== 1 ? "s" : ""}
+                </Link>
+              )}
+            </p>
+          </div>
+
+          {/* Reset button */}
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            style={{
+              background: "rgba(224,82,82,0.1)", color: "#e05252",
+              border: "1px solid rgba(224,82,82,0.3)", borderRadius: "8px",
+              padding: "10px 20px", cursor: "pointer", fontSize: "0.85rem",
+              fontFamily: "var(--font-body)", fontWeight: 500,
+              opacity: resetting ? 0.7 : 1, transition: "all 0.2s",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {resetting ? "Resetting..." : "🔄 Reset All Data"}
+          </button>
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -116,11 +161,12 @@ export default function Dashboard() {
                 const colors = statusColors[table.status];
                 return (
                   <Link key={table.tableNumber} href={`/admin/tables/${table.tableNumber}`} style={{ textDecoration: "none" }}>
-                    <div style={{
-                      background: colors.bg, border: `1px solid ${colors.border}`,
-                      borderRadius: "10px", padding: "16px 12px", textAlign: "center",
-                      cursor: "pointer", transition: "all 0.2s ease",
-                    }}
+                    <div
+                      style={{
+                        background: colors.bg, border: `1px solid ${colors.border}`,
+                        borderRadius: "10px", padding: "16px 12px", textAlign: "center",
+                        cursor: "pointer", transition: "all 0.2s ease",
+                      }}
                       onMouseOver={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
                       onMouseOut={(e) => (e.currentTarget.style.transform = "translateY(0)")}
                     >

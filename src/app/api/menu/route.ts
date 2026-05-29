@@ -44,16 +44,17 @@ export async function POST(req: NextRequest) {
   const itemCourse = course && validCourses.includes(course) ? course : "MAIN";
 
   const item = await prisma.menuItem.create({
-    data: {
-      name,
-      category,
-      course: itemCourse,
-      description: description || null,
-      imageUrl: imageUrl || null,
-      quantity: parseInt(quantity),
-      isAvailable: parseInt(quantity) > 0,
-    },
-  });
+  data: {
+    name,
+    category,
+    course: itemCourse,
+    description: description || null,
+    imageUrl: imageUrl || null,
+    quantity: parseInt(quantity),
+    originalQuantity: parseInt(quantity),  // ← ADD THIS
+    isAvailable: parseInt(quantity) > 0,
+  },
+});
 
   return NextResponse.json({ success: true, item }, { status: 201 });
 }

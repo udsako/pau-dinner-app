@@ -23,9 +23,10 @@ export async function PATCH(
   if (description !== undefined) updateData.description = description;
   if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
   if (quantity !== undefined) {
-    updateData.quantity = parseInt(quantity);
-    updateData.isAvailable = parseInt(quantity) > 0;
-  }
+  updateData.quantity = parseInt(quantity);
+  updateData.originalQuantity = parseInt(quantity);  // ← ADD THIS
+  updateData.isAvailable = parseInt(quantity) > 0;
+}
   if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
 
   try {
