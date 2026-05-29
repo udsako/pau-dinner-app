@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { tableNumber } = body;
+  const { tableNumber, course } = body;
 
   if (!tableNumber) {
     return NextResponse.json({ success: false, error: "tableNumber is required." }, { status: 400 });
@@ -22,22 +22,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
   }
 
-  // Get the active course
-  const courseControl = await prisma.courseControl.findFirst();
-  const activeCourse = courseControl?.activeCourse;
+  // Use provided course, or fall back to first open course
+  let targetCourse = course;
+  if (!targetCourse) {
+    const courseControl = await prisma.courseControl.findFirst();
+    const openCourses = courseControl?.openCourses || [];
+    targetCourse = openCourses[0];
+  }
 
-  if (!activeCourse) {
+  if (!targetCourse) {
     return NextResponse.json(
-      { success: false, error: "No course is currently active. Open a course first." },
+      { success: false, error: "No course specified and no course is currently open." },
       { status: 400 }
     );
   }
 
-  const result = await dispatchTableForCourse(table.id, activeCourse, "MANUAL");
+  const result = await dispatchTableForCourse(table.id, targetCourse, "MANUAL");
 
   if (!result.success) {
     return NextResponse.json(
-      { success: false, error: `No pending ${activeCourse.toLowerCase()} orders to dispatch for this table.` },
+      { success: false, error: `No pending ${targetCourse.toLowerCase()} orders to dispatch for this table.` },
       { status: 400 }
     );
   }
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
     success: true,
     dispatched: {
       tableNumber,
-      course: activeCourse,
+      course: targetCourse,
       orderCount: result.orderCount,
       summary: result.summary,
     },

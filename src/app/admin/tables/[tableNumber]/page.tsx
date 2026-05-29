@@ -14,13 +14,15 @@ const COURSE_CONFIG: Record<Course, { label: string; emoji: string; color: strin
   DESSERT: { label: "Dessert", emoji: "🍰", color: "#a78bfa" },
 };
 
+const ALL_COURSES: Course[] = ["STARTER", "MAIN", "DESSERT"];
+
 function GraceTimer({ quorumMetAt }: { quorumMetAt: string }) {
   const [timeLeft, setTimeLeft] = useState("");
   useEffect(() => {
     const update = () => {
       const elapsed = (Date.now() - new Date(quorumMetAt).getTime()) / 1000 / 60;
-      const remaining = Math.max(0, 10 - elapsed);
-      if (remaining <= 0) { setTimeLeft("Dispatching imminently..."); return; }
+      const remaining = Math.max(0, 5 - elapsed);
+      if (remaining <= 0) { setTimeLeft("Grace period ended — send manually"); return; }
       const mins = Math.floor(remaining);
       const secs = Math.floor((remaining - mins) * 60);
       setTimeLeft(`${mins}:${secs.toString().padStart(2, "0")} remaining`);
@@ -35,7 +37,7 @@ function GraceTimer({ quorumMetAt }: { quorumMetAt: string }) {
       <span style={{ fontSize: "20px" }}>⏳</span>
       <div>
         <p style={{ fontSize: "0.75rem", color: "#fbbf24", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "2px" }}>Grace Period Active</p>
-        <p style={{ color: "#f5f0e8", fontSize: "0.9rem" }}>Auto-dispatching in <strong style={{ color: "#fbbf24" }}>{timeLeft}</strong></p>
+        <p style={{ color: "#f5f0e8", fontSize: "0.9rem" }}><strong style={{ color: "#fbbf24" }}>{timeLeft}</strong></p>
       </div>
     </div>
   );
@@ -47,9 +49,9 @@ export default function TableDetailPage() {
 
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [table, setTable] = useState<DinnerTable | null>(null);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+  const [openCourses, setOpenCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dispatching, setDispatching] = useState(false);
+  const [dispatching, setDispatching] = useState<Course | null>(null);
   const [selectedCourse, setSelectedCourse] = useState<Course>("STARTER");
 
   const fetchData = useCallback(async () => {
@@ -60,8 +62,14 @@ export default function TableDetailPage() {
       ]);
       setAllOrders(ordersRes.orders || []);
       setTable(ordersRes.table || null);
-      setActiveCourse(courseRes.activeCourse || null);
-      if (courseRes.activeCourse) setSelectedCourse(courseRes.activeCourse as Course);
+      const open: Course[] = courseRes.openCourses || [];
+      setOpenCourses(open);
+      // Auto-select the first open course that has pending orders
+      const courseWithPending = ALL_COURSES.find((c) =>
+        open.includes(c) && (ordersRes.orders || []).some((o: Order) => o.course === c && o.status === "PENDING")
+      );
+      if (courseWithPending) setSelectedCourse(courseWithPending);
+      else if (open.length > 0) setSelectedCourse(open[0]);
     } finally {
       setLoading(false);
     }
@@ -73,20 +81,32 @@ export default function TableDetailPage() {
     return () => clearInterval(i);
   }, [fetchData]);
 
-  const handleDispatch = async () => {
-    setDispatching(true);
+  const handleDispatch = async (course: Course) => {
+    setDispatching(course);
     try {
-      await adminAPI.dispatch(tableNumber);
-      toast.success(`Table ${tableNumber} ${activeCourse} orders dispatched!`);
-      fetchData();
+      // Temporarily set the active course context for dispatch
+      const res = await fetch("/api/admin/dispatch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("pau_dinner_token")}`,
+        },
+        body: JSON.stringify({ tableNumber, course }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Table ${tableNumber} ${COURSE_CONFIG[course].label} orders dispatched!`);
+        fetchData();
+      } else {
+        toast.error(data.error || "Dispatch failed.");
+      }
     } catch (err: any) {
       toast.error(err.message || "Dispatch failed.");
     } finally {
-      setDispatching(false);
+      setDispatching(null);
     }
   };
 
-  // Per-course data
   const courseOrders = (course: Course) => allOrders.filter((o) => o.course === course);
   const courseSummary = (course: Course) => {
     const summary: Record<string, number> = {};
@@ -100,7 +120,8 @@ export default function TableDetailPage() {
   const courseDispatched = (course: Course) => courseOrders(course).some((o) => o.status === "DISPATCHED");
   const coursePending = (course: Course) => courseOrders(course).filter((o) => o.status === "PENDING");
 
-  const COURSES: Course[] = ["STARTER", "MAIN", "DESSERT"];
+  // Total pending orders across all courses
+  const totalPending = ALL_COURSES.reduce((sum, c) => sum + coursePending(c).length, 0);
 
   return (
     <div style={{ padding: "40px", maxWidth: "960px" }}>
@@ -113,33 +134,44 @@ export default function TableDetailPage() {
         <div>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "4px" }}>Table Detail</p>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.6rem", color: "#f5f0e8", lineHeight: 1 }}>Table {tableNumber}</h1>
-          {activeCourse && (
-            <p style={{ color: "#9b93b0", fontSize: "0.85rem", marginTop: "8px" }}>
-              Active course: <strong style={{ color: COURSE_CONFIG[activeCourse].color }}>{COURSE_CONFIG[activeCourse].emoji} {COURSE_CONFIG[activeCourse].label}</strong>
-            </p>
-          )}
+          <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+            {openCourses.length > 0 ? openCourses.map((c) => (
+              <span key={c} style={{ fontSize: "0.72rem", padding: "2px 10px", borderRadius: "20px", background: `${COURSE_CONFIG[c].color}22`, border: `1px solid ${COURSE_CONFIG[c].color}44`, color: COURSE_CONFIG[c].color, fontWeight: 600 }}>
+                ● {COURSE_CONFIG[c].label} open
+              </span>
+            )) : (
+              <span style={{ fontSize: "0.72rem", color: "#9b93b0" }}>No courses open</span>
+            )}
+          </div>
         </div>
 
-        {/* Dispatch button — only for active course */}
-        {activeCourse && !courseDispatched(activeCourse) && (
+        {/* Dispatch panel — always visible when there are pending orders */}
+        {totalPending > 0 && (
           <div className="card" style={{ padding: "20px", minWidth: "220px" }}>
-            <p className="label" style={{ marginBottom: "4px" }}>Dispatch Active Course</p>
-            <p style={{ fontSize: "0.78rem", color: "#9b93b0", marginBottom: "12px" }}>
-              {COURSE_CONFIG[activeCourse].emoji} {COURSE_CONFIG[activeCourse].label} — {coursePending(activeCourse).length} pending
-            </p>
-            <button
-              className="btn-gold"
-              onClick={handleDispatch}
-              disabled={dispatching || coursePending(activeCourse).length === 0}
-              style={{ width: "100%", fontSize: "0.9rem", opacity: (dispatching || coursePending(activeCourse).length === 0) ? 0.6 : 1 }}
-            >
-              {dispatching ? "Dispatching..." : `Send to Waiter`}
-            </button>
-          </div>
-        )}
-        {activeCourse && courseDispatched(activeCourse) && (
-          <div style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: "10px", padding: "16px 20px" }}>
-            <p style={{ color: "#34d399", fontWeight: 600 }}>✅ {COURSE_CONFIG[activeCourse].label} Dispatched</p>
+            <p className="label" style={{ marginBottom: "12px" }}>Send to Waiter</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {ALL_COURSES.map((course) => {
+                const pending = coursePending(course);
+                if (pending.length === 0) return null;
+                const config = COURSE_CONFIG[course];
+                const isDispatching = dispatching === course;
+                return (
+                  <button
+                    key={course}
+                    className="btn-gold"
+                    onClick={() => handleDispatch(course)}
+                    disabled={isDispatching}
+                    style={{
+                      width: "100%", fontSize: "0.85rem", padding: "10px",
+                      opacity: isDispatching ? 0.6 : 1,
+                      background: `linear-gradient(135deg, ${config.color}cc, ${config.color}88)`,
+                    }}
+                  >
+                    {isDispatching ? "Dispatching..." : `${config.emoji} ${config.label} (${pending.length})`}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -149,13 +181,14 @@ export default function TableDetailPage() {
         <GraceTimer quorumMetAt={table.quorumMetAt} />
       )}
 
-      {/* ── Per-Course Summary Strip ── */}
+      {/* Per-Course Summary Strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "32px" }}>
-        {COURSES.map((course) => {
+        {ALL_COURSES.map((course) => {
           const config = COURSE_CONFIG[course];
           const orders = courseOrders(course);
           const dispatched = courseDispatched(course);
-          const isActive = activeCourse === course;
+          const pending = coursePending(course);
+          const isOpen = openCourses.includes(course);
           return (
             <button
               key={course}
@@ -169,8 +202,11 @@ export default function TableDetailPage() {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
                 <span style={{ fontSize: "18px" }}>{config.emoji}</span>
-                {isActive && <span style={{ fontSize: "0.6rem", color: config.color, fontWeight: 700, letterSpacing: "0.06em", background: `${config.color}22`, padding: "2px 8px", borderRadius: "10px" }}>OPEN</span>}
-                {dispatched && !isActive && <span style={{ fontSize: "0.6rem", color: "#34d399", fontWeight: 700 }}>✓ DONE</span>}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                  {isOpen && <span style={{ fontSize: "0.58rem", color: config.color, fontWeight: 700, background: `${config.color}22`, padding: "1px 6px", borderRadius: "8px" }}>OPEN</span>}
+                  {dispatched && <span style={{ fontSize: "0.58rem", color: "#34d399", fontWeight: 700 }}>✓ SENT</span>}
+                  {pending.length > 0 && <span style={{ fontSize: "0.58rem", color: "#fbbf24", fontWeight: 700 }}>{pending.length} pending</span>}
+                </div>
               </div>
               <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "#f5f0e8", marginBottom: "4px" }}>{config.label}</p>
               <p style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", color: config.color }}>
@@ -183,16 +219,32 @@ export default function TableDetailPage() {
 
       {/* Selected course detail */}
       <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", color: "#f5f0e8" }}>
             {COURSE_CONFIG[selectedCourse].emoji} {COURSE_CONFIG[selectedCourse].label} Orders
+            <span style={{ fontSize: "0.78rem", color: "#9b93b0", fontFamily: "var(--font-body)", fontWeight: 400, marginLeft: "10px" }}>
+              ({courseOrders(selectedCourse).length} total)
+            </span>
           </h2>
-          <span style={{ fontSize: "0.78rem", color: "#9b93b0" }}>
-            ({courseOrders(selectedCourse).length} orders)
-          </span>
+          {/* Quick dispatch for selected course if it has pending */}
+          {coursePending(selectedCourse).length > 0 && (
+            <button
+              onClick={() => handleDispatch(selectedCourse)}
+              disabled={dispatching === selectedCourse}
+              style={{
+                background: `${COURSE_CONFIG[selectedCourse].color}22`,
+                border: `1px solid ${COURSE_CONFIG[selectedCourse].color}44`,
+                color: COURSE_CONFIG[selectedCourse].color,
+                borderRadius: "8px", padding: "6px 14px", cursor: "pointer",
+                fontSize: "0.82rem", fontFamily: "var(--font-body)", fontWeight: 600,
+              }}
+            >
+              {dispatching === selectedCourse ? "Sending..." : `Send ${coursePending(selectedCourse).length} to Waiter`}
+            </button>
+          )}
         </div>
 
-        {/* Food summary for selected course */}
+        {/* Food summary */}
         {Object.keys(courseSummary(selectedCourse)).length > 0 && (
           <div className="card" style={{ padding: "20px", marginBottom: "20px" }}>
             <p className="label" style={{ marginBottom: "12px" }}>Food Summary</p>
@@ -207,7 +259,7 @@ export default function TableDetailPage() {
           </div>
         )}
 
-        {/* Individual orders for selected course */}
+        {/* Individual orders */}
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: "80px", borderRadius: "10px" }} />)}
