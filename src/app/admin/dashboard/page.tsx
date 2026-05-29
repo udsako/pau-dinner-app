@@ -47,27 +47,31 @@ export default function Dashboard() {
   }, [fetchData]);
 
   const handleReset = async () => {
-    if (!confirm("⚠️ This will delete ALL orders, reset all tables to 0/10, and restore all menu quantities. Are you sure?")) return;
-    setResetting(true);
-    try {
-      const token = localStorage.getItem("pau_dinner_token");
-      const res = await fetch("/api/admin/reset", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        fetchData();
-      } else {
-        toast.error(data.error);
-      }
-    } catch {
-      toast.error("Reset failed.");
-    } finally {
-      setResetting(false);
+  if (!confirm("⚠️ This will delete ALL orders and reset all tables and menu quantities. Are you sure?")) return;
+  setResetting(true);
+  try {
+    const token = localStorage.getItem("pau_dinner_token");
+    const res = await fetch("/api/admin/reset", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    if (data.success) {
+      toast.success(data.message || "Reset complete!");
+      fetchData();
+    } else {
+      toast.error(data.error || "Reset failed.");
     }
-  };
+  } catch {
+    toast.error("Reset failed.");
+  } finally {
+    setResetting(false);
+  }
+};
 
   const stats = {
     total: tables.length,
