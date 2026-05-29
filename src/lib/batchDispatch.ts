@@ -2,7 +2,7 @@
 import { prisma } from "./prisma";
 
 const QUORUM_THRESHOLD = 7;
-const GRACE_PERIOD_MINUTES = 10;
+const GRACE_PERIOD_MINUTES = 5;
 
 /**
  * Get the currently active course from CourseControl
