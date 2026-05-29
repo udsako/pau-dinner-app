@@ -61,9 +61,15 @@ export default function Dashboard() {
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
     if (data.success) {
-      toast.success(data.message || "Reset complete!");
-      fetchData();
-    } else {
+  // Clear this browser's order session so admin can re-test ordering
+  ["STARTER", "MAIN", "DESSERT"].forEach((c) =>
+    localStorage.removeItem(`pau_dinner_ordered_${c}`)
+  );
+  localStorage.removeItem("pau_dinner_name");
+  localStorage.removeItem("pau_dinner_table");
+  toast.success(data.message || "Reset complete! You can now test ordering again.");
+  fetchData();
+} else {
       toast.error(data.error || "Reset failed.");
     }
   } catch {
