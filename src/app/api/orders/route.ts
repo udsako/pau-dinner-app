@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { checkAndTriggerDispatch, checkStockLevel } from "@/lib/batchDispatch";
 
+const COURSE_ORDER = ["STARTER", "MAIN", "DESSERT"];
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -19,39 +21,66 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Please select at least one food item." }, { status: 400 });
     }
 
-    // Get active course
-    const courseControl = await prisma.courseControl.findFirst();
-    const activeCourse = courseControl?.activeCourse;
+    const name = studentName.trim();
 
-    if (!activeCourse) {
+    // Get open courses
+    const courseControl = await prisma.courseControl.findFirst();
+    const openCourses: string[] = courseControl?.openCourses || [];
+
+    if (openCourses.length === 0) {
       return NextResponse.json(
         { success: false, error: "Ordering is not open yet. Please wait for the announcement." },
         { status: 409 }
       );
     }
 
-    // Sequential ordering enforcement
-    const name = studentName.trim();
+    // Get what this student has already ordered
+    const existingOrders = await prisma.order.findMany({
+      where: { studentName: name, tableNumber },
+      select: { course: true },
+    });
+    const orderedCourses = existingOrders.map((o) => o.course as string);
 
-    if (activeCourse === "MAIN" || activeCourse === "DESSERT") {
-      const requiredPrevious = activeCourse === "MAIN" ? ["STARTER"] : ["STARTER", "MAIN"];
-      for (const requiredCourse of requiredPrevious) {
-        const previousOrder = await prisma.order.findFirst({
-          where: { studentName: name, tableNumber, course: requiredCourse as any },
-        });
-        if (!previousOrder) {
-          const courseLabel = requiredCourse === "STARTER" ? "Starter" : "Main Course";
-          return NextResponse.json(
-            { success: false, error: `You need to order your ${courseLabel} before ordering ${activeCourse === "MAIN" ? "the Main Course" : "Dessert"}.` },
-            { status: 409 }
-          );
-        }
+    // Find the correct course for this student:
+    // The earliest open course they haven't ordered yet, in sequence
+    let activeCourse: string | null = null;
+    for (const course of COURSE_ORDER) {
+      if (!openCourses.includes(course)) continue;
+      if (orderedCourses.includes(course)) continue;
+
+      // Check sequential requirement
+      const courseIndex = COURSE_ORDER.indexOf(course);
+      const previousCourses = COURSE_ORDER.slice(0, courseIndex);
+      const missingPrevious = previousCourses.find((c) => !orderedCourses.includes(c));
+
+      if (missingPrevious) {
+        // They're missing a previous course — if that previous course is open, they should order it first
+        // If it's not open, we skip this course too (can't jump ahead)
+        continue;
       }
+
+      activeCourse = course;
+      break;
     }
 
-    // Check duplicate order for this course
+    if (!activeCourse) {
+      // Figure out why and give a helpful message
+      const nextNeeded = COURSE_ORDER.find((c) => !orderedCourses.includes(c));
+      if (nextNeeded && !openCourses.includes(nextNeeded)) {
+        return NextResponse.json(
+          { success: false, error: `You've completed all currently open courses. Wait for the next course to open.` },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { success: false, error: "No available course to order. Please wait for an announcement." },
+        { status: 409 }
+      );
+    }
+
+    // Check duplicate
     const existingOrder = await prisma.order.findUnique({
-      where: { studentName_tableNumber_course: { studentName: name, tableNumber, course: activeCourse } },
+      where: { studentName_tableNumber_course: { studentName: name, tableNumber, course: activeCourse as any } },
     });
     if (existingOrder) {
       return NextResponse.json(
@@ -65,14 +94,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Table not found." }, { status: 404 });
     }
 
-    // Validate menu items
+    // Validate items belong to the active course
     const menuItemIds = items.map((i: { menuItemId: string; variant?: string }) => i.menuItemId);
     const menuItems = await prisma.menuItem.findMany({ where: { id: { in: menuItemIds } } });
 
     for (const menuItem of menuItems) {
       if (menuItem.course !== activeCourse) {
         return NextResponse.json(
-          { success: false, error: `"${menuItem.name}" is not part of the current course.` },
+          { success: false, error: `"${menuItem.name}" is not part of your current course (${activeCourse}).` },
           { status: 409 }
         );
       }
@@ -98,7 +127,7 @@ export async function POST(req: NextRequest) {
           studentName: name,
           tableNumber,
           tableId: table.id,
-          course: activeCourse,
+          course: activeCourse as any,
           specialNotes: specialNotes?.trim() || null,
           status: "PENDING",
           items: {
@@ -106,11 +135,7 @@ export async function POST(req: NextRequest) {
               const itemInput = items.find((i: any) => i.menuItemId === menuItem.id);
               const variant = itemInput?.variant;
               const displayName = variant ? `${menuItem.name} (${variant})` : menuItem.name;
-              return {
-                menuItemId: menuItem.id,
-                menuItemName: displayName,
-                quantity: 1,
-              };
+              return { menuItemId: menuItem.id, menuItemName: displayName, quantity: 1 };
             }),
           },
         },
@@ -125,7 +150,7 @@ export async function POST(req: NextRequest) {
       return newOrder;
     });
 
-    // Notify dashboard of new order
+    // Notify dashboard
     await prisma.notification.create({
       data: {
         type: "NEW_ORDER",

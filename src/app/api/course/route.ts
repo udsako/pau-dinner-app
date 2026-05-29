@@ -3,16 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
-// GET /api/course — public, returns the currently active course
+// GET /api/course — returns list of currently open courses
 export async function GET() {
   let control = await prisma.courseControl.findFirst();
   if (!control) {
-    control = await prisma.courseControl.create({ data: {} });
+    control = await prisma.courseControl.create({ data: { openCourses: [] } });
   }
-  return NextResponse.json({ success: true, activeCourse: control.activeCourse });
+  return NextResponse.json({ success: true, openCourses: control.openCourses });
 }
 
-// POST /api/course — admin only, set the active course
+// POST /api/course — admin sets which courses are open
 export async function POST(req: NextRequest) {
   const user = requireAuth(req, ["ADMIN"]);
   if (!user) {
@@ -20,32 +20,36 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { activeCourse } = body;
+  const { openCourses } = body; // string[] e.g. ["STARTER", "MAIN"]
 
-  const validCourses = ["STARTER", "MAIN", "DESSERT", null];
-  if (!validCourses.includes(activeCourse)) {
-    return NextResponse.json({ success: false, error: "Invalid course value." }, { status: 400 });
-  }
+  const validCourses = ["STARTER", "MAIN", "DESSERT"];
+  const filtered = Array.isArray(openCourses)
+    ? openCourses.filter((c: string) => validCourses.includes(c))
+    : [];
 
   let control = await prisma.courseControl.findFirst();
   if (!control) {
-    control = await prisma.courseControl.create({ data: { activeCourse, updatedBy: user.userId } });
+    control = await prisma.courseControl.create({
+      data: { openCourses: filtered, updatedBy: user.userId },
+    });
   } else {
     control = await prisma.courseControl.update({
       where: { id: control.id },
-      data: { activeCourse, updatedBy: user.userId },
+      data: { openCourses: filtered, updatedBy: user.userId },
     });
   }
+
+  const message = filtered.length === 0
+    ? "⏸ Ordering paused. No courses are open."
+    : `✅ Open courses: ${filtered.join(", ")}`;
 
   await prisma.notification.create({
     data: {
       type: "NEW_ORDER",
-      message: activeCourse
-        ? `✅ ${activeCourse} course is now open for ordering.`
-        : `⏸ Ordering has been paused.`,
-      metadata: { activeCourse },
+      message,
+      metadata: { openCourses: filtered },
     },
   });
 
-  return NextResponse.json({ success: true, activeCourse: control.activeCourse });
+  return NextResponse.json({ success: true, openCourses: control.openCourses });
 }

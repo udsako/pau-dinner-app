@@ -39,9 +39,9 @@ export const authAPI = {
 };
 
 export const courseAPI = {
-  getActive: () => apiFetch<{ success: boolean; activeCourse: string | null }>("/api/course"),
-  setActive: (activeCourse: string | null) =>
-    apiFetch("/api/course", { method: "POST", body: JSON.stringify({ activeCourse }) }, true),
+  getActive: () => apiFetch<{ success: boolean; openCourses: string[] }>("/api/course"),
+  setActive: (openCourses: string[]) =>
+    apiFetch("/api/course", { method: "POST", body: JSON.stringify({ openCourses }) }, true),
 };
 
 export const menuAPI = {
@@ -58,7 +58,7 @@ export const menuAPI = {
 };
 
 export const ordersAPI = {
-  place: (body: { studentName: string; tableNumber: number; items: { menuItemId: string }[]; specialNotes?: string }) =>
+  place: (body: { studentName: string; tableNumber: number; items: { menuItemId: string; variant?: string | null }[]; specialNotes?: string }) =>
     apiFetch("/api/orders", { method: "POST", body: JSON.stringify(body) }),
   getByTable: (tableNumber: number, course?: string) =>
     apiFetch(`/api/orders?tableNumber=${tableNumber}${course ? `&course=${course}` : ""}`, {}, true),

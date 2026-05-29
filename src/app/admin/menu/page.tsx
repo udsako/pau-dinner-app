@@ -22,7 +22,7 @@ const EMPTY_FORM = {
 
 export default function MenuPage() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+  const [openCourses, setOpenCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -38,7 +38,7 @@ export default function MenuPage() {
         courseAPI.getActive(),
       ]);
       setMenu(menuRes.menu || []);
-      setActiveCourse(courseRes.activeCourse || null);
+      setOpenCourses(courseRes.openCourses || []);
     } finally {
       setLoading(false);
     }
@@ -46,13 +46,35 @@ export default function MenuPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleSetCourse = async (course: Course | null) => {
+  const handleToggleCourse = async (course: Course) => {
     setTogglingCourse(true);
     try {
-      const newCourse = activeCourse === course ? null : course;
-      await courseAPI.setActive(newCourse);
-      setActiveCourse(newCourse);
-      toast.success(newCourse ? `${COURSE_CONFIG[newCourse].label} is now open for ordering!` : "Ordering paused.");
+      const isOpen = openCourses.includes(course);
+      const newOpenCourses = isOpen
+        ? openCourses.filter((c) => c !== course)
+        : [...openCourses, course];
+
+      await courseAPI.setActive(newOpenCourses);
+      setOpenCourses(newOpenCourses);
+
+      if (isOpen) {
+        toast.success(`${COURSE_CONFIG[course].label} closed.`);
+      } else {
+        toast.success(`${COURSE_CONFIG[course].label} is now open for ordering!`);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setTogglingCourse(false);
+    }
+  };
+
+  const handlePauseAll = async () => {
+    setTogglingCourse(true);
+    try {
+      await courseAPI.setActive([]);
+      setOpenCourses([]);
+      toast.success("All ordering paused.");
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -74,10 +96,7 @@ export default function MenuPage() {
   const removeVariant = (v: string) => setVariants((prev) => prev.filter((x) => x !== v));
 
   const handleSave = async () => {
-    if (!form.name || !form.quantity) {
-      toast.error("Name and quantity are required.");
-      return;
-    }
+    if (!form.name || !form.quantity) { toast.error("Name and quantity are required."); return; }
     setSaving(true);
     try {
       const payload = { ...form, variants };
@@ -88,10 +107,7 @@ export default function MenuPage() {
         await menuAPI.create(payload);
         toast.success("Item added to menu.");
       }
-      setShowForm(false);
-      setEditingId(null);
-      setForm(EMPTY_FORM);
-      setVariants([]);
+      setShowForm(false); setEditingId(null); setForm(EMPTY_FORM); setVariants([]);
       fetchData();
     } catch (err: any) {
       toast.error(err.message || "Failed to save.");
@@ -101,15 +117,7 @@ export default function MenuPage() {
   };
 
   const handleEdit = (item: MenuItem) => {
-    setForm({
-      name: item.name,
-      category: item.category,
-      course: item.course,
-      description: item.description || "",
-      quantity: String(item.quantity),
-      imageUrl: item.imageUrl || "",
-      variantInput: "",
-    });
+    setForm({ name: item.name, category: item.category, course: item.course, description: item.description || "", quantity: String(item.quantity), imageUrl: item.imageUrl || "", variantInput: "" });
     setVariants(item.variants || []);
     setEditingId(item.id);
     setShowForm(true);
@@ -121,9 +129,7 @@ export default function MenuPage() {
       await menuAPI.update(item.id, { isAvailable: !item.isAvailable });
       toast.success(item.isAvailable ? "Item disabled." : "Item enabled.");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -132,9 +138,7 @@ export default function MenuPage() {
       await menuAPI.delete(id);
       toast.success("Item deleted.");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
   };
 
   return (
@@ -150,42 +154,59 @@ export default function MenuPage() {
         </button>
       </div>
 
-      {/* Course Control Panel */}
+      {/* ── Course Control Panel ── */}
       <div className="card" style={{ padding: "24px", marginBottom: "32px" }}>
         <div style={{ marginBottom: "16px" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#f5f0e8", marginBottom: "4px" }}>Course Control</h2>
-          <p style={{ fontSize: "0.82rem", color: "#9b93b0" }}>Toggle which course students can currently order from. Only one course can be active at a time.</p>
+          <p style={{ fontSize: "0.82rem", color: "#9b93b0" }}>
+            Toggle courses on/off independently. Multiple courses can be open at once —
+            students will see the earliest course they haven't ordered yet.
+          </p>
         </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
           {COURSES.map((course) => {
             const config = COURSE_CONFIG[course];
-            const isActive = activeCourse === course;
+            const isOpen = openCourses.includes(course);
             return (
-              <button key={course} onClick={() => handleSetCourse(course)} disabled={togglingCourse} style={{
-                padding: "16px", borderRadius: "10px", border: "none", cursor: "pointer",
-                background: isActive ? config.bg : "rgba(255,255,255,0.04)",
-                outline: isActive ? `2px solid ${config.border}` : "2px solid transparent",
-                transition: "all 0.2s ease", opacity: togglingCourse ? 0.7 : 1,
-                display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
-              }}>
+              <button key={course} onClick={() => handleToggleCourse(course)} disabled={togglingCourse}
+                style={{
+                  padding: "16px", borderRadius: "10px", border: "none", cursor: "pointer",
+                  background: isOpen ? config.bg : "rgba(255,255,255,0.04)",
+                  outline: isOpen ? `2px solid ${config.border}` : "2px solid transparent",
+                  transition: "all 0.2s ease", opacity: togglingCourse ? 0.7 : 1,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+                }}>
                 <span style={{ fontSize: "28px" }}>{config.emoji}</span>
-                <span style={{ fontWeight: 600, color: isActive ? config.color : "#9b93b0", fontSize: "0.85rem" }}>{config.label}</span>
+                <span style={{ fontWeight: 600, color: isOpen ? config.color : "#9b93b0", fontSize: "0.85rem" }}>{config.label}</span>
                 <span style={{
                   fontSize: "0.68rem", padding: "3px 10px", borderRadius: "20px",
-                  background: isActive ? `${config.color}22` : "rgba(255,255,255,0.05)",
-                  color: isActive ? config.color : "#9b93b0",
-                  border: `1px solid ${isActive ? config.border : "transparent"}`,
+                  background: isOpen ? `${config.color}22` : "rgba(255,255,255,0.05)",
+                  color: isOpen ? config.color : "#9b93b0",
+                  border: `1px solid ${isOpen ? config.border : "transparent"}`,
                   fontWeight: 600, letterSpacing: "0.05em",
                 }}>
-                  {isActive ? "● OPEN" : "○ CLOSED"}
+                  {isOpen ? "● OPEN" : "○ CLOSED"}
                 </span>
               </button>
             );
           })}
         </div>
-        {activeCourse && (
-          <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
-            <button onClick={() => handleSetCourse(null)} disabled={togglingCourse} style={{
+
+        {/* Info about what's open */}
+        {openCourses.length > 0 && (
+          <div style={{ marginTop: "16px", padding: "12px 16px", background: "rgba(201,168,76,0.06)", borderRadius: "8px", border: "1px solid rgba(201,168,76,0.15)" }}>
+            <p style={{ fontSize: "0.8rem", color: "#9b93b0" }}>
+              <strong style={{ color: "#c9a84c" }}>Currently open:</strong>{" "}
+              {openCourses.map((c) => `${COURSE_CONFIG[c].emoji} ${COURSE_CONFIG[c].label}`).join(" · ")}
+              {" "}— Students see their next uncompleted course automatically.
+            </p>
+          </div>
+        )}
+
+        {openCourses.length > 0 && (
+          <div style={{ marginTop: "12px", display: "flex", justifyContent: "center" }}>
+            <button onClick={handlePauseAll} disabled={togglingCourse} style={{
               background: "rgba(224,82,82,0.1)", color: "#e05252",
               border: "1px solid rgba(224,82,82,0.3)", borderRadius: "8px",
               padding: "8px 20px", cursor: "pointer", fontSize: "0.82rem",
@@ -228,63 +249,33 @@ export default function MenuPage() {
               <label className="label">Description (optional)</label>
               <input className="input-field" type="text" placeholder="Short description shown to students" value={form.description} onChange={(e) => handleChange("description", e.target.value)} />
             </div>
-
-            {/* Variants / sub-options */}
             <div style={{ gridColumn: "1 / -1" }}>
               <label className="label">Sub-options / Variants (optional)</label>
               <p style={{ fontSize: "0.78rem", color: "#9b93b0", marginBottom: "10px" }}>
-                Add options students must pick from — e.g. "Chicken", "Fish", "Assorted Meat" for Jollof Rice.
-                Students must pick exactly one.
+                e.g. "Chicken", "Fish", "Assorted Meat" for Jollof Rice. Students pick exactly one.
               </p>
               <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
-                <input
-                  className="input-field"
-                  type="text"
-                  placeholder='Type an option e.g. "Chicken" then click Add'
-                  value={form.variantInput}
-                  onChange={(e) => handleChange("variantInput", e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addVariant())}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  onClick={addVariant}
-                  type="button"
-                  style={{
-                    background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)",
-                    borderRadius: "8px", padding: "0 16px", cursor: "pointer", color: "#c9a84c",
-                    fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.85rem", whiteSpace: "nowrap",
-                  }}
-                >
+                <input className="input-field" type="text" placeholder='Type option e.g. "Chicken" then click Add'
+                  value={form.variantInput} onChange={(e) => handleChange("variantInput", e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addVariant())} style={{ flex: 1 }} />
+                <button onClick={addVariant} type="button" style={{ background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: "8px", padding: "0 16px", cursor: "pointer", color: "#c9a84c", fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.85rem", whiteSpace: "nowrap" }}>
                   + Add
                 </button>
               </div>
-              {variants.length > 0 && (
+              {variants.length > 0 ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   {variants.map((v) => (
-                    <div key={v} style={{
-                      display: "flex", alignItems: "center", gap: "6px",
-                      background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)",
-                      borderRadius: "20px", padding: "4px 12px",
-                    }}>
+                    <div key={v} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: "20px", padding: "4px 12px" }}>
                       <span style={{ fontSize: "0.82rem", color: "#e8c97e" }}>{v}</span>
-                      <button
-                        onClick={() => removeVariant(v)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9b93b0", fontSize: "14px", lineHeight: 1, padding: "0 2px" }}
-                      >
-                        ×
-                      </button>
+                      <button onClick={() => removeVariant(v)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9b93b0", fontSize: "14px", lineHeight: 1, padding: "0 2px" }}>×</button>
                     </div>
                   ))}
                 </div>
-              )}
-              {variants.length === 0 && (
-                <p style={{ fontSize: "0.75rem", color: "#9b93b0", fontStyle: "italic" }}>
-                  No sub-options added — students will just select this item directly.
-                </p>
+              ) : (
+                <p style={{ fontSize: "0.75rem", color: "#9b93b0", fontStyle: "italic" }}>No sub-options — students select this item directly.</p>
               )}
             </div>
           </div>
-
           <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
             <button className="btn-gold" onClick={handleSave} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
               {saving ? "Saving..." : editingId ? "Update Item" : "Add Item"}
@@ -294,7 +285,7 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Menu grouped by course then category */}
+      {/* Menu grouped by course */}
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {[1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: "80px", borderRadius: "10px" }} />)}
@@ -309,7 +300,7 @@ export default function MenuPage() {
           const courseItems = menu.filter((item) => item.course === course);
           if (courseItems.length === 0) return null;
           const config = COURSE_CONFIG[course];
-          const isActive = activeCourse === course;
+          const isOpen = openCourses.includes(course);
 
           const grouped = courseItems.reduce((acc, item) => {
             if (!acc[item.category]) acc[item.category] = [];
@@ -319,30 +310,17 @@ export default function MenuPage() {
 
           return (
             <div key={course} style={{ marginBottom: "40px" }}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px",
-                padding: "12px 16px", borderRadius: "10px",
-                background: isActive ? config.bg : "rgba(255,255,255,0.03)",
-                border: `1px solid ${isActive ? config.border : "rgba(255,255,255,0.06)"}`,
-              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", padding: "12px 16px", borderRadius: "10px", background: isOpen ? config.bg : "rgba(255,255,255,0.03)", border: `1px solid ${isOpen ? config.border : "rgba(255,255,255,0.06)"}` }}>
                 <span style={{ fontSize: "20px" }}>{config.emoji}</span>
-                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", color: isActive ? config.color : "#f5f0e8", flex: 1 }}>
-                  {config.label}
-                </h2>
-                <span style={{
-                  fontSize: "0.68rem", padding: "3px 10px", borderRadius: "20px",
-                  background: isActive ? `${config.color}22` : "rgba(255,255,255,0.05)",
-                  color: isActive ? config.color : "#9b93b0", fontWeight: 700, letterSpacing: "0.06em",
-                }}>
-                  {isActive ? "● OPEN" : "CLOSED"}
-                </span>
+                <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", color: isOpen ? config.color : "#f5f0e8", flex: 1 }}>{config.label}</h2>
+                <button onClick={() => handleToggleCourse(course)} disabled={togglingCourse} style={{ fontSize: "0.68rem", padding: "4px 12px", borderRadius: "20px", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 700, letterSpacing: "0.06em", background: isOpen ? `${config.color}22` : "rgba(255,255,255,0.08)", color: isOpen ? config.color : "#9b93b0" }}>
+                  {isOpen ? "● OPEN — click to close" : "○ CLOSED — click to open"}
+                </button>
               </div>
 
               {Object.entries(grouped).map(([category, items]) => (
                 <div key={category} style={{ marginBottom: "20px" }}>
-                  <p style={{ fontSize: "0.75rem", color: "#9b93b0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "8px", paddingLeft: "4px" }}>
-                    {category}
-                  </p>
+                  <p style={{ fontSize: "0.75rem", color: "#9b93b0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "8px", paddingLeft: "4px" }}>{category}</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     {items.map((item) => (
                       <div key={item.id} className="card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: "14px", opacity: item.isAvailable ? 1 : 0.5 }}>
@@ -354,41 +332,25 @@ export default function MenuPage() {
                             {item.quantity === 0 && <span style={{ fontSize: "0.7rem", color: "#e05252", background: "rgba(224,82,82,0.1)", padding: "2px 8px", borderRadius: "10px" }}>Sold out</span>}
                           </div>
                           {item.description && <p style={{ fontSize: "0.78rem", color: "#9b93b0" }}>{item.description}</p>}
-                          {/* Show variants if any */}
                           {item.variants && item.variants.length > 0 && (
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
-                              <span style={{ fontSize: "0.68rem", color: "#9b93b0", marginRight: "4px" }}>Options:</span>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+                              <span style={{ fontSize: "0.68rem", color: "#9b93b0", marginRight: "2px" }}>Options:</span>
                               {item.variants.map((v) => (
-                                <span key={v} style={{
-                                  fontSize: "0.68rem", color: "#c9a84c",
-                                  background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)",
-                                  borderRadius: "10px", padding: "1px 8px",
-                                }}>
-                                  {v}
-                                </span>
+                                <span key={v} style={{ fontSize: "0.68rem", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "10px", padding: "1px 8px" }}>{v}</span>
                               ))}
                             </div>
                           )}
                         </div>
-
                         <div style={{ textAlign: "center", minWidth: "52px" }}>
                           <p style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", color: item.quantity <= 5 ? "#fbbf24" : "#c9a84c" }}>{item.quantity}</p>
                           <p style={{ fontSize: "0.6rem", color: "#9b93b0", letterSpacing: "0.05em" }}>LEFT</p>
                         </div>
-
                         <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                           <button className="btn-ghost" onClick={() => handleEdit(item)} style={{ fontSize: "0.75rem", padding: "5px 10px" }}>Edit</button>
-                          <button onClick={() => handleToggle(item)} style={{
-                            padding: "5px 10px", borderRadius: "8px", border: "none", cursor: "pointer",
-                            background: item.isAvailable ? "rgba(224,82,82,0.1)" : "rgba(52,211,153,0.1)",
-                            color: item.isAvailable ? "#e05252" : "#34d399",
-                            fontSize: "0.75rem", fontFamily: "var(--font-body)",
-                          }}>
+                          <button onClick={() => handleToggle(item)} style={{ padding: "5px 10px", borderRadius: "8px", border: "none", cursor: "pointer", background: item.isAvailable ? "rgba(224,82,82,0.1)" : "rgba(52,211,153,0.1)", color: item.isAvailable ? "#e05252" : "#34d399", fontSize: "0.75rem", fontFamily: "var(--font-body)" }}>
                             {item.isAvailable ? "Disable" : "Enable"}
                           </button>
-                          <button className="btn-danger" onClick={() => handleDelete(item.id, item.name)} style={{ fontSize: "0.75rem", padding: "5px 10px" }}>
-                            Delete
-                          </button>
+                          <button className="btn-danger" onClick={() => handleDelete(item.id, item.name)} style={{ fontSize: "0.75rem", padding: "5px 10px" }}>Delete</button>
                         </div>
                       </div>
                     ))}
