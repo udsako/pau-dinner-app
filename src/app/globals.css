@@ -253,3 +253,55 @@ option {
   animation: shimmer 1.5s infinite;
   border-radius: 6px;
 }
+
+/* ── Mobile responsiveness ── */
+@media (max-width: 768px) {
+  /* Admin page content padding */
+  .admin-main > div {
+    padding: 20px 16px !important;
+    max-width: 100% !important;
+  }
+
+  /* Stats grid — 2 columns on mobile */
+  .admin-main div[style*="repeat(auto-fit, minmax(160px"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Table grid — smaller cards on mobile */
+  .admin-main div[style*="repeat(auto-fill, minmax(120px"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* Two column grids become single column */
+  .admin-main div[style*="1fr 320px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Course control 3 columns — keep on mobile but smaller */
+  .admin-main div[style*="repeat(3, 1fr)"] {
+    gap: 8px !important;
+  }
+
+  /* Table detail per-course strip */
+  .admin-main div[style*="gridTemplateColumns: \"repeat(3, 1fr)\""] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Buttons on mobile */
+  .btn-gold, .btn-ghost, .btn-danger {
+    font-size: 0.82rem !important;
+    padding: 10px 16px !important;
+  }
+
+  /* Form grids become single column */
+  .admin-main div[style*="gridTemplateColumns: \"1fr 1fr\""] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Fix dispatch panel on table detail */
+  .admin-main div[style*="minWidth: \"220px\""] {
+    min-width: unset !important;
+    width: 100% !important;
+  }
+}
