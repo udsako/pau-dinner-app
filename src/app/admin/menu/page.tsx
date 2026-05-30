@@ -142,12 +142,12 @@ export default function MenuPage() {
   };
 
   return (
-    <div style={{ padding: "40px", maxWidth: "960px" }}>
+    <div style={{ padding: "20px 16px", maxWidth: "960px" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "32px", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "6px" }}>Management</p>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2.2rem", color: "#f5f0e8" }}>Menu & Course Control</h1>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.6rem, 5vw, 2.2rem)", color: "#f5f0e8" }}>Menu & Course Control</h1>
         </div>
         <button className="btn-gold" onClick={() => { setShowForm(!showForm); setEditingId(null); setForm(EMPTY_FORM); setVariants([]); }}>
           {showForm ? "Cancel" : "+ Add Item"}
@@ -224,7 +224,7 @@ export default function MenuPage() {
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e", marginBottom: "20px" }}>
             {editingId ? "Edit Item" : "New Menu Item"}
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
             <div>
               <label className="label">Name *</label>
               <input className="input-field" type="text" placeholder="e.g. Jollof Rice" value={form.name} onChange={(e) => handleChange("name", e.target.value)} />
