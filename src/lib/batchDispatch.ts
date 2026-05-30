@@ -5,53 +5,48 @@ const QUORUM_THRESHOLD = 7;
 const GRACE_PERIOD_MINUTES = 5;
 
 /**
- * Get the currently active course from CourseControl
+ * Get the first open course from CourseControl
  */
-async function getActiveCourse(): Promise<string | null> {
+async function getFirstOpenCourse(): Promise<string | null> {
   const control = await prisma.courseControl.findFirst();
-  return control?.activeCourse ?? null;
+  const openCourses = control?.openCourses || [];
+  const COURSE_ORDER = ["STARTER", "MAIN", "DESSERT"];
+  return COURSE_ORDER.find((c) => openCourses.includes(c)) || null;
 }
 
 /**
  * Called after every new order is placed.
- * Checks quorum for the current course and potentially triggers auto-dispatch.
+ * Checks quorum for each open course and potentially triggers auto-dispatch.
  */
 export async function checkAndTriggerDispatch(tableId: string): Promise<void> {
-  const activeCourse = await getActiveCourse();
-  if (!activeCourse) return;
+  const control = await prisma.courseControl.findFirst();
+  const openCourses: string[] = control?.openCourses || [];
+  if (openCourses.length === 0) return;
 
-  const table = await prisma.dinnerTable.findUnique({
-    where: { id: tableId },
-    include: {
-      orders: { where: { status: "PENDING", course: activeCourse as any } },
-    },
-  });
-
+  const table = await prisma.dinnerTable.findUnique({ where: { id: tableId } });
   if (!table) return;
 
-  // Count how many people have ordered THIS course at this table
-  const courseOrderCount = await prisma.order.count({
-    where: { tableId, course: activeCourse as any },
-  });
-
-  // Check if table is already dispatched FOR THIS COURSE
-  const alreadyDispatched = await prisma.order.findFirst({
-    where: { tableId, course: activeCourse as any, status: "DISPATCHED" },
-  });
-  if (alreadyDispatched) return; // already dispatched for this course
-
-  // If all 10 ordered this course → immediate dispatch
-  if (courseOrderCount >= table.capacity) {
-    await dispatchTableForCourse(tableId, activeCourse, "AUTO_FULL");
-    return;
-  }
-
-  // If quorum just reached → update table status and quorumMetAt
-  if (courseOrderCount >= QUORUM_THRESHOLD && table.status !== "QUORUM_MET") {
-    await prisma.dinnerTable.update({
-      where: { id: tableId },
-      data: { status: "QUORUM_MET", quorumMetAt: new Date() },
+  for (const course of openCourses) {
+    const courseOrderCount = await prisma.order.count({
+      where: { tableId, course: course as any },
     });
+
+    const alreadyDispatched = await prisma.order.findFirst({
+      where: { tableId, course: course as any, status: "DISPATCHED" },
+    });
+    if (alreadyDispatched) continue;
+
+    if (courseOrderCount >= table.capacity) {
+      await dispatchTableForCourse(tableId, course, "AUTO_FULL");
+      continue;
+    }
+
+    if (courseOrderCount >= QUORUM_THRESHOLD && table.status !== "QUORUM_MET") {
+      await prisma.dinnerTable.update({
+        where: { id: tableId },
+        data: { status: "QUORUM_MET", quorumMetAt: new Date() },
+      });
+    }
   }
 }
 
@@ -80,7 +75,6 @@ export async function dispatchTableForCourse(
     return { success: false, orderCount: 0, summary: {} };
   }
 
-  // Build food summary
   const summary: Record<string, number> = {};
   for (const order of pendingOrders) {
     for (const item of order.items) {
@@ -88,13 +82,11 @@ export async function dispatchTableForCourse(
     }
   }
 
-  // Update pending orders for this course to DISPATCHED
   await prisma.order.updateMany({
     where: { tableId, course: course as any, status: "PENDING" },
     data: { status: "DISPATCHED" },
   });
 
-  // Reset table status to COLLECTING (ready for next course)
   await prisma.dinnerTable.update({
     where: { id: tableId },
     data: {
@@ -105,66 +97,44 @@ export async function dispatchTableForCourse(
     },
   });
 
-  const COURSE_EMOJI: Record<string, string> = {
-    STARTER: "🥗", MAIN: "🍽️", DESSERT: "🍰",
-  };
+  const COURSE_EMOJI: Record<string, string> = { STARTER: "🥗", MAIN: "🍽️", DESSERT: "🍰" };
 
   await prisma.notification.create({
     data: {
       type: "DISPATCHED",
       message: `${COURSE_EMOJI[course] || ""} Table ${table.tableNumber} ${course} dispatched (${trigger}). ${pendingOrders.length} orders: ${Object.entries(summary).map(([k, v]) => `${v}× ${k}`).join(", ")}`,
-      metadata: {
-        tableNumber: table.tableNumber,
-        course,
-        trigger,
-        summary,
-        orderCount: pendingOrders.length,
-      },
+      metadata: { tableNumber: table.tableNumber, course, trigger, summary, orderCount: pendingOrders.length },
     },
   });
 
   return { success: true, orderCount: pendingOrders.length, summary };
 }
 
-/**
- * Kept for backward compatibility — dispatches for the active course
- */
 export async function dispatchTable(
   tableId: string,
   trigger: "AUTO_FULL" | "GRACE_TIMER" | "MANUAL"
 ): Promise<{ success: boolean; orderCount: number; summary: Record<string, number> }> {
-  const activeCourse = await getActiveCourse();
-  if (!activeCourse) return { success: false, orderCount: 0, summary: {} };
-  return dispatchTableForCourse(tableId, activeCourse, trigger);
+  const course = await getFirstOpenCourse();
+  if (!course) return { success: false, orderCount: 0, summary: {} };
+  return dispatchTableForCourse(tableId, course, trigger);
 }
 
-/**
- * Grace timer — checks QUORUM_MET tables and dispatches if expired
- */
 export async function processGraceTimers(): Promise<void> {
   const graceCutoff = new Date(Date.now() - GRACE_PERIOD_MINUTES * 60 * 1000);
-
   const tablesReadyToDispatch = await prisma.dinnerTable.findMany({
     where: { status: "QUORUM_MET", quorumMetAt: { lte: graceCutoff } },
   });
-
   for (const table of tablesReadyToDispatch) {
     await dispatchTable(table.id, "GRACE_TIMER");
   }
 }
 
-/**
- * Check stock level after an order and create notifications
- */
 export async function checkStockLevel(menuItemId: string): Promise<void> {
   const item = await prisma.menuItem.findUnique({ where: { id: menuItemId } });
   if (!item) return;
 
   if (item.quantity === 0) {
-    await prisma.menuItem.update({
-      where: { id: menuItemId },
-      data: { isAvailable: false },
-    });
+    await prisma.menuItem.update({ where: { id: menuItemId }, data: { isAvailable: false } });
     await prisma.notification.create({
       data: {
         type: "SOLD_OUT",
