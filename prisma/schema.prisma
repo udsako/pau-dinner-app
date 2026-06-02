@@ -124,3 +124,41 @@ model Notification {
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 }
+
+enum BbqItemCategory {
+  COMPULSORY
+  PROTEIN
+  STARCH
+}
+
+model BbqMenuItem {
+  id               String          @id @default(uuid())
+  name             String
+  description      String?
+  category         BbqItemCategory
+  quantity         Int
+  quantityReserved Int             @default(0)
+  isAvailable      Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  proteinOrders BbqOrder[] @relation("ProteinChoice")
+  starchOrders  BbqOrder[] @relation("StarchChoice")
+
+  @@map("bbq_menu_items")
+}
+
+model BbqOrder {
+  id              String   @id @default(uuid())
+  studentName     String
+  department      String
+  proteinChoiceId String
+  starchChoiceId  String
+  confirmedItems  Json
+  orderedAt       DateTime @default(now())
+
+  proteinChoice BbqMenuItem @relation("ProteinChoice", fields: [proteinChoiceId], references: [id])
+  starchChoice  BbqMenuItem @relation("StarchChoice",  fields: [starchChoiceId],  references: [id])
+
+  @@map("bbq_orders")
+}
