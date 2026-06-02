@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { href: "/admin/tables", icon: "◈", label: "Tables" },
   { href: "/admin/waiter", icon: "🍽️", label: "Waiter" },
   { href: "/admin/menu", icon: "✦", label: "Menu" },
+  { href: "/admin/bbq", icon: "🔥", label: "BBQ" },
   { href: "/admin/notifications", icon: "◉", label: "Alerts" },
 ];
 
