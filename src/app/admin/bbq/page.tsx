@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import type { BbqMenuItem, BbqOrder } from "@/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -22,43 +23,37 @@ export default function AdminBbqPage() {
   const [token, setToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"menu" | "orders">("orders");
 
-  // Menu state
   const [menu, setMenu] = useState<BbqMenuItem[]>([]);
   const [menuLoading, setMenuLoading] = useState(true);
   const [addForm, setAddForm] = useState({ name: "", description: "", category: "COMPULSORY", quantity: "" });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", quantity: "", isAvailable: true });
-  const [menuMsg, setMenuMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Orders state
   const [orders, setOrders] = useState<BbqOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
 
-  // ─── Auth guard (same pattern as dashboard) ──────────────────────────────────
   useEffect(() => {
     const t = localStorage.getItem("pau_dinner_token");
-    if (!t) {
-      router.push("/admin/login");
-      return;
-    }
+    if (!t) { router.push("/admin/login"); return; }
     setToken(t);
   }, [router]);
 
-  // ─── Fetch menu ──────────────────────────────────────────────────────────────
   const fetchMenu = useCallback(async () => {
     setMenuLoading(true);
     try {
       const res = await fetch("/api/bbq/menu");
       const data = await res.json();
       if (Array.isArray(data)) setMenu(data);
+      else toast.error("Failed to load menu.");
+    } catch {
+      toast.error("Network error loading menu.");
     } finally {
       setMenuLoading(false);
     }
   }, []);
 
-  // ─── Fetch orders ────────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     if (!token) return;
     setOrdersLoading(true);
@@ -71,6 +66,8 @@ export default function AdminBbqPage() {
       });
       const data = await res.json();
       if (Array.isArray(data)) setOrders(data);
+    } catch {
+      toast.error("Failed to load orders.");
     } finally {
       setOrdersLoading(false);
     }
@@ -79,31 +76,27 @@ export default function AdminBbqPage() {
   useEffect(() => { if (token) fetchMenu(); }, [fetchMenu, token]);
   useEffect(() => { if (activeTab === "orders" && token) fetchOrders(); }, [activeTab, fetchOrders, token]);
 
-  // ─── Add menu item ───────────────────────────────────────────────────────────
   const handleAddItem = async () => {
     if (!addForm.name || !addForm.quantity) {
-      return setMenuMsg({ type: "error", text: "Name and quantity are required." });
+      toast.error("Name and quantity are required.");
+      return;
     }
     try {
       const res = await fetch("/api/bbq/menu", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...addForm, quantity: Number(addForm.quantity) }),
       });
       const data = await res.json();
-      if (!res.ok) return setMenuMsg({ type: "error", text: data.error });
-      setMenuMsg({ type: "success", text: `"${data.name}" added successfully!` });
+      if (!res.ok) { toast.error(data.error || "Failed to add item."); return; }
+      toast.success(`"${data.name}" added!`);
       setAddForm({ name: "", description: "", category: "COMPULSORY", quantity: "" });
       fetchMenu();
     } catch {
-      setMenuMsg({ type: "error", text: "Failed to add item." });
+      toast.error("Failed to add item.");
     }
   };
 
-  // ─── Edit menu item ──────────────────────────────────────────────────────────
   const startEdit = (item: BbqMenuItem) => {
     setEditingId(item.id);
     setEditForm({ name: item.name, description: item.description ?? "", quantity: String(item.quantity), isAvailable: item.isAvailable });
@@ -113,38 +106,38 @@ export default function AdminBbqPage() {
     try {
       const res = await fetch(`/api/bbq/menu/${id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...editForm, quantity: Number(editForm.quantity) }),
       });
       const data = await res.json();
-      if (!res.ok) return setMenuMsg({ type: "error", text: data.error });
+      if (!res.ok) { toast.error(data.error || "Failed to update."); return; }
+      toast.success("Item updated.");
       setEditingId(null);
-      setMenuMsg({ type: "success", text: "Item updated." });
       fetchMenu();
     } catch {
-      setMenuMsg({ type: "error", text: "Failed to update item." });
+      toast.error("Failed to update item.");
     }
   };
 
   const handleDeleteItem = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const loadingToast = toast.loading("Deleting...");
     try {
-      const res = await fetch(`/api/bbq/menu/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return setMenuMsg({ type: "error", text: "Failed to delete item." });
-      setMenuMsg({ type: "success", text: `"${name}" deleted.` });
+      const res = await fetch(`/api/bbq/menu/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      toast.dismiss(loadingToast);
+      if (!res.ok) {
+        toast.error(data.error || `Delete failed (${res.status})`);
+        return;
+      }
+      toast.success(`"${name}" deleted.`);
       fetchMenu();
-    } catch {
-      setMenuMsg({ type: "error", text: "Failed to delete item." });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error("Network error — delete failed.");
     }
   };
 
-  // ─── CSV Export ──────────────────────────────────────────────────────────────
   const exportCSV = () => {
     const compulsoryNames = menu.filter((i) => i.category === "COMPULSORY").map((i) => i.name).join(", ");
     const headers = ["#", "Name", "Department", "Protein", "Starch", "Compulsory Items", "Ordered At"];
@@ -167,15 +160,9 @@ export default function AdminBbqPage() {
     URL.revokeObjectURL(url);
   };
 
-  // ─── Derived data ────────────────────────────────────────────────────────────
   const filteredOrders = orders.filter((o) => {
     const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      o.studentName.toLowerCase().includes(q) ||
-      o.department.toLowerCase().includes(q) ||
-      o.proteinChoice?.name.toLowerCase().includes(q) ||
-      o.starchChoice?.name.toLowerCase().includes(q);
+    const matchSearch = !q || o.studentName.toLowerCase().includes(q) || o.department.toLowerCase().includes(q) || o.proteinChoice?.name.toLowerCase().includes(q) || o.starchChoice?.name.toLowerCase().includes(q);
     const matchDept = !deptFilter || o.department === deptFilter;
     return matchSearch && matchDept;
   });
@@ -194,7 +181,6 @@ export default function AdminBbqPage() {
 
   if (!token) return null;
 
-  // ─── Shared styles ───────────────────────────────────────────────────────────
   const inputSm = {
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(201,168,76,0.2)",
@@ -207,31 +193,7 @@ export default function AdminBbqPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--charcoal)" }}>
-      {/* Header */}
-      <header
-        className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between"
-        style={{
-          background: "rgba(26,21,16,0.95)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid rgba(201,168,76,0.15)",
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/admin/dashboard")}
-            className="text-xs uppercase tracking-widest flex items-center gap-1"
-            style={{ color: "var(--text-muted)" }}
-          >
-            ← Dashboard
-          </button>
-          <span style={{ color: "rgba(201,168,76,0.3)" }}>|</span>
-          <h1 className="text-xl font-light" style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}>
-            🔥 BBQ Management
-          </h1>
-        </div>
-      </header>
-
+    <div style={{ minHeight: "100vh" }}>
       {/* Tabs */}
       <div className="flex px-6 gap-1 pt-4" style={{ borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
         {(["orders", "menu"] as const).map((tab) => (
@@ -251,46 +213,42 @@ export default function AdminBbqPage() {
         ))}
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 24px" }}>
 
         {/* ══ ORDERS TAB ══ */}
         {activeTab === "orders" && (
           <div>
-            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {[
                 { label: "Total Orders", value: orders.length, icon: "📋" },
                 { label: "Departments", value: uniqueDepts.length, icon: "🏛️" },
                 ...Object.entries(proteinStats).map(([name, count]) => ({
-                  label: name,
-                  value: count,
+                  label: name, value: count,
                   icon: name.toLowerCase().includes("turkey") ? "🦃" : "🐟",
                 })),
               ].map(({ label, value, icon }) => (
-                <div key={label} className="p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(201,168,76,0.12)", borderRadius: "4px" }}>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>{icon} {label}</p>
-                  <p className="text-3xl font-light" style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}>{value}</p>
+                <div key={label} className="card" style={{ padding: "16px" }}>
+                  <p style={{ fontSize: "0.65rem", letterSpacing: "0.1em", textTransform: "uppercase", color: "#9b93b0", marginBottom: "6px" }}>{icon} {label}</p>
+                  <p style={{ fontFamily: "var(--font-display)", fontSize: "1.8rem", fontWeight: 600, color: "#c9a84c" }}>{value}</p>
                 </div>
               ))}
             </div>
 
-            {/* Starch stats */}
             {Object.keys(starchStats).length > 0 && (
               <div className="grid grid-cols-2 gap-4 mb-8">
                 {Object.entries(starchStats).map(([name, count]) => (
-                  <div key={name} className="p-4 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(201,168,76,0.12)", borderRadius: "4px" }}>
+                  <div key={name} className="card" style={{ padding: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
                     <span style={{ fontSize: "20px" }}>{name.toLowerCase().includes("yam") ? "🍠" : "🍌"}</span>
                     <div>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{name}</p>
-                      <p className="text-2xl font-light" style={{ fontFamily: "var(--font-cormorant)", color: "var(--cream)" }}>{count}</p>
+                      <p style={{ fontSize: "0.75rem", color: "#9b93b0" }}>{name}</p>
+                      <p style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: "#f5f0e8" }}>{count}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Filters + Export */}
-            <div className="flex flex-wrap gap-3 mb-5 items-center">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "20px", alignItems: "center" }}>
               <input
                 type="text"
                 value={search}
@@ -300,69 +258,49 @@ export default function AdminBbqPage() {
                 onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")}
               />
-              <select
-                value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
-                style={{ ...inputSm, cursor: "pointer" }}
-              >
+              <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} style={{ ...inputSm, cursor: "pointer" }}>
                 <option value="">All Departments</option>
-                {uniqueDepts.map((d) => (
-                  <option key={d} value={d} style={{ background: "#1a1510" }}>{d}</option>
-                ))}
+                {uniqueDepts.map((d) => <option key={d} value={d} style={{ background: "#1a1510" }}>{d}</option>)}
               </select>
-              <button onClick={() => fetchOrders()} className="px-4 py-2 text-xs uppercase tracking-widest" style={{ border: "1px solid rgba(201,168,76,0.3)", borderRadius: "2px", color: "var(--gold)" }}>
-                Refresh
-              </button>
-              <button onClick={exportCSV} className="px-4 py-2 text-xs uppercase tracking-widest" style={{ background: "linear-gradient(135deg, var(--gold-dark), var(--gold))", borderRadius: "2px", color: "var(--charcoal)", fontWeight: 600 }}>
-                ↓ Export CSV
-              </button>
+              <button onClick={() => fetchOrders()} className="btn-ghost" style={{ fontSize: "0.8rem" }}>Refresh</button>
+              <button onClick={exportCSV} className="btn-gold" style={{ fontSize: "0.8rem" }}>↓ Export CSV</button>
             </div>
 
-            <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+            <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginBottom: "16px" }}>
               Showing {filteredOrders.length} of {orders.length} orders
             </p>
 
-            {/* Table */}
             <div style={{ overflowX: "auto" }}>
-              <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid rgba(201,168,76,0.15)" }}>
                     {["#", "Name", "Department", "Protein", "Starch", "Time"].map((h) => (
-                      <th key={h} className="text-left py-3 px-3 text-xs uppercase tracking-widest font-medium" style={{ color: "var(--text-muted)" }}>{h}</th>
+                      <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9b93b0", fontWeight: 500 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {ordersLoading ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-12" style={{ color: "var(--text-muted)" }}>
-                        <div className="w-5 h-5 border-2 rounded-full mx-auto mb-2 animate-spin" style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }} />
-                        Loading orders...
-                      </td>
-                    </tr>
+                    <tr><td colSpan={6} style={{ textAlign: "center", padding: "48px", color: "#9b93b0" }}>Loading orders...</td></tr>
                   ) : filteredOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-12" style={{ color: "var(--text-muted)" }}>
-                        {orders.length === 0 ? "No BBQ orders yet." : "No orders match your search."}
-                      </td>
-                    </tr>
+                    <tr><td colSpan={6} style={{ textAlign: "center", padding: "48px", color: "#9b93b0" }}>{orders.length === 0 ? "No BBQ orders yet." : "No orders match your search."}</td></tr>
                   ) : (
                     filteredOrders.map((order, idx) => (
                       <tr key={order.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                        <td className="py-3 px-3" style={{ color: "var(--text-muted)", fontSize: "12px" }}>{idx + 1}</td>
-                        <td className="py-3 px-3 font-medium" style={{ color: "var(--cream)" }}>{order.studentName}</td>
-                        <td className="py-3 px-3" style={{ color: "var(--text-muted)" }}>{order.department}</td>
-                        <td className="py-3 px-3">
-                          <span className="px-2 py-0.5 text-xs" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: "2px", color: "#fbbf24" }}>
+                        <td style={{ padding: "10px 12px", color: "#9b93b0", fontSize: "0.75rem" }}>{idx + 1}</td>
+                        <td style={{ padding: "10px 12px", color: "#f5f0e8", fontWeight: 500 }}>{order.studentName}</td>
+                        <td style={{ padding: "10px 12px", color: "#9b93b0" }}>{order.department}</td>
+                        <td style={{ padding: "10px 12px" }}>
+                          <span style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: "4px", padding: "2px 8px", fontSize: "0.75rem", color: "#fbbf24" }}>
                             {order.proteinChoice?.name ?? "—"}
                           </span>
                         </td>
-                        <td className="py-3 px-3">
-                          <span className="px-2 py-0.5 text-xs" style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: "2px", color: "#34d399" }}>
+                        <td style={{ padding: "10px 12px" }}>
+                          <span style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: "4px", padding: "2px 8px", fontSize: "0.75rem", color: "#34d399" }}>
                             {order.starchChoice?.name ?? "—"}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                        <td style={{ padding: "10px 12px", fontSize: "0.75rem", color: "#9b93b0" }}>
                           {new Date(order.orderedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </td>
                       </tr>
@@ -377,112 +315,107 @@ export default function AdminBbqPage() {
         {/* ══ MENU TAB ══ */}
         {activeTab === "menu" && (
           <div>
-            {menuMsg && (
-              <div className="mb-6 px-4 py-3 text-sm" style={{ background: menuMsg.type === "success" ? "rgba(52,211,153,0.08)" : "rgba(239,68,68,0.08)", border: `1px solid ${menuMsg.type === "success" ? "rgba(52,211,153,0.25)" : "rgba(239,68,68,0.25)"}`, borderRadius: "2px", color: menuMsg.type === "success" ? "#34d399" : "#fca5a5" }}>
-                {menuMsg.text}
-                <button onClick={() => setMenuMsg(null)} className="float-right opacity-50 hover:opacity-100">×</button>
-              </div>
-            )}
-
             {/* Add Item Form */}
-            <div className="p-6 mb-8" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px" }}>
-              <h2 className="text-xl font-light mb-5" style={{ fontFamily: "var(--font-cormorant)", color: "var(--cream)" }}>
+            <div className="card" style={{ padding: "24px", marginBottom: "32px" }}>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e", marginBottom: "20px" }}>
                 Add BBQ Menu Item
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "16px" }}>
                 <div>
-                  <label className="block text-xs mb-1.5 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Item Name *</label>
-                  <input type="text" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Turkey, Fried Yam, Coleslaw" style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                  <label className="label">Item Name *</label>
+                  <input type="text" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Turkey, Fried Yam, Coleslaw" className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs mb-1.5 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Category *</label>
-                  <select value={addForm.category} onChange={(e) => setAddForm((p) => ({ ...p, category: e.target.value }))} style={{ ...inputSm, width: "100%", cursor: "pointer" }}>
+                  <label className="label">Category *</label>
+                  <select value={addForm.category} onChange={(e) => setAddForm((p) => ({ ...p, category: e.target.value }))} className="input-field" style={{ cursor: "pointer" }}>
                     {Object.entries(CATEGORY_LABELS).map(([val, label]) => (
                       <option key={val} value={val} style={{ background: "#1a1510" }}>{label}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs mb-1.5 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Quantity / Stock *</label>
-                  <input type="number" value={addForm.quantity} onChange={(e) => setAddForm((p) => ({ ...p, quantity: e.target.value }))} placeholder="e.g. 235" min={1} style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                  <label className="label">Quantity / Stock *</label>
+                  <input type="number" value={addForm.quantity} onChange={(e) => setAddForm((p) => ({ ...p, quantity: e.target.value }))} placeholder="e.g. 235" min={1} className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs mb-1.5 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Description (optional)</label>
-                  <input type="text" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} placeholder="Short description" style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                  <label className="label">Description (optional)</label>
+                  <input type="text" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} placeholder="Short description" className="input-field" />
                 </div>
               </div>
-              <div className="mb-4 px-4 py-3 text-xs" style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.12)", borderRadius: "2px" }}>
-                <strong style={{ color: "var(--gold)" }}>Category guide: </strong>
-                <span style={{ color: "var(--text-muted)" }}>
-                  <strong style={{ color: "#93c5fd" }}>Compulsory</strong> — included for everyone, student must confirm ·{" "}
-                  <strong style={{ color: "#fbbf24" }}>Protein</strong> — pick 1 of 2 (max 2 options) ·{" "}
-                  <strong style={{ color: "#34d399" }}>Starch</strong> — pick 1 of 2 (max 2 options)
-                </span>
+              <div style={{ marginBottom: "16px", padding: "10px 14px", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.12)", borderRadius: "8px", fontSize: "0.78rem", color: "#9b93b0" }}>
+                <strong style={{ color: "#c9a84c" }}>Category guide: </strong>
+                <strong style={{ color: "#93c5fd" }}>Compulsory</strong> — everyone gets, must confirm ·{" "}
+                <strong style={{ color: "#fbbf24" }}>Protein</strong> — pick 1 of 2 (max 2) ·{" "}
+                <strong style={{ color: "#34d399" }}>Starch</strong> — pick 1 of 2 (max 2)
               </div>
-              <button onClick={handleAddItem} className="px-6 py-2.5 text-sm font-medium uppercase tracking-widest" style={{ background: "linear-gradient(135deg, var(--gold-dark), var(--gold))", color: "var(--charcoal)", borderRadius: "2px" }}>
-                + Add Item
-              </button>
+              <button className="btn-gold" onClick={handleAddItem}>+ Add Item</button>
             </div>
 
             {/* Existing Items */}
-            <h2 className="text-xl font-light mb-4" style={{ fontFamily: "var(--font-cormorant)", color: "var(--cream)" }}>BBQ Menu Items</h2>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#f5f0e8", marginBottom: "16px" }}>
+              BBQ Menu Items
+            </h2>
+
             {menuLoading ? (
-              <div className="text-center py-10" style={{ color: "var(--text-muted)" }}>
-                <div className="w-5 h-5 border-2 rounded-full mx-auto mb-2 animate-spin" style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }} />
-                Loading...
-              </div>
+              <div style={{ textAlign: "center", padding: "40px", color: "#9b93b0" }}>Loading...</div>
             ) : menu.length === 0 ? (
-              <p className="text-center py-10 text-sm" style={{ color: "var(--text-muted)" }}>No BBQ menu items yet. Add one above.</p>
+              <div className="card" style={{ padding: "40px", textAlign: "center" }}>
+                <p style={{ color: "#9b93b0" }}>No BBQ menu items yet. Add one above.</p>
+              </div>
             ) : (
-              <div className="grid gap-3">
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {(["COMPULSORY", "PROTEIN", "STARCH"] as const).map((cat) => {
                   const catItems = menu.filter((i) => i.category === cat);
                   if (catItems.length === 0) return null;
                   const colors = CATEGORY_COLORS[cat];
                   return (
-                    <div key={cat}>
-                      <p className="text-xs uppercase tracking-widest mb-2 px-1" style={{ color: colors.text }}>{CATEGORY_LABELS[cat]}</p>
-                      <div className="grid gap-2 mb-5">
+                    <div key={cat} style={{ marginBottom: "24px" }}>
+                      <p style={{ fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase", color: colors.text, marginBottom: "8px", paddingLeft: "4px" }}>
+                        {CATEGORY_LABELS[cat]}
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         {catItems.map((item) => (
-                          <div key={item.id} className="p-4" style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: "4px" }}>
+                          <div key={item.id} className="card" style={{ padding: "14px 18px", background: colors.bg, border: `1px solid ${colors.border}` }}>
                             {editingId === item.id ? (
-                              <div className="grid gap-3">
-                                <div className="grid grid-cols-2 gap-3">
+                              <div style={{ display: "grid", gap: "12px" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                                   <div>
-                                    <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>Name</label>
-                                    <input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                                    <label className="label">Name</label>
+                                    <input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} className="input-field" />
                                   </div>
                                   <div>
-                                    <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>Stock</label>
-                                    <input type="number" value={editForm.quantity} onChange={(e) => setEditForm((p) => ({ ...p, quantity: e.target.value }))} style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                                    <label className="label">Stock</label>
+                                    <input type="number" value={editForm.quantity} onChange={(e) => setEditForm((p) => ({ ...p, quantity: e.target.value }))} className="input-field" />
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>Description</label>
-                                  <input value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} style={{ ...inputSm, width: "100%" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")} />
+                                  <label className="label">Description</label>
+                                  <input value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} className="input-field" />
                                 </div>
-                                <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--text-muted)" }}>
+                                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", color: "#9b93b0", cursor: "pointer" }}>
                                   <input type="checkbox" checked={editForm.isAvailable} onChange={(e) => setEditForm((p) => ({ ...p, isAvailable: e.target.checked }))} />
                                   Available
                                 </label>
-                                <div className="flex gap-2">
-                                  <button onClick={() => handleSaveEdit(item.id)} className="px-4 py-1.5 text-xs uppercase tracking-widest" style={{ background: "var(--gold)", color: "var(--charcoal)", borderRadius: "2px" }}>Save</button>
-                                  <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs uppercase tracking-widest" style={{ border: "1px solid rgba(201,168,76,0.3)", borderRadius: "2px", color: "var(--text-muted)" }}>Cancel</button>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <button className="btn-gold" onClick={() => handleSaveEdit(item.id)} style={{ fontSize: "0.8rem", padding: "6px 16px" }}>Save</button>
+                                  <button className="btn-ghost" onClick={() => setEditingId(null)} style={{ fontSize: "0.8rem", padding: "6px 16px" }}>Cancel</button>
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="font-medium text-sm" style={{ color: "var(--cream)" }}>{item.name}</span>
-                                    {!item.isAvailable && <span className="text-xs px-1.5 py-0.5" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "2px", color: "#fca5a5" }}>Disabled</span>}
+                              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+                                    <p style={{ fontWeight: 500, color: "#f5f0e8" }}>{item.name}</p>
+                                    {!item.isAvailable && <span style={{ fontSize: "0.7rem", color: "#e05252", background: "rgba(224,82,82,0.1)", padding: "2px 8px", borderRadius: "10px" }}>Disabled</span>}
                                   </div>
-                                  {item.description && <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{item.description}</p>}
-                                  <p className="text-xs" style={{ color: colors.text }}>{item.quantityRemaining} / {item.quantity} remaining</p>
+                                  {item.description && <p style={{ fontSize: "0.78rem", color: "#9b93b0" }}>{item.description}</p>}
+                                  <p style={{ fontSize: "0.75rem", color: colors.text, marginTop: "2px" }}>
+                                    {item.quantityRemaining} / {item.quantity} remaining
+                                  </p>
                                 </div>
-                                <div className="flex gap-2 flex-shrink-0">
-                                  <button onClick={() => startEdit(item)} className="px-3 py-1 text-xs" style={{ border: "1px solid rgba(201,168,76,0.25)", borderRadius: "2px", color: "var(--gold)" }}>Edit</button>
-                                  <button onClick={() => handleDeleteItem(item.id, item.name)} className="px-3 py-1 text-xs" style={{ border: "1px solid rgba(239,68,68,0.25)", borderRadius: "2px", color: "#fca5a5" }}>Delete</button>
+                                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                                  <button className="btn-ghost" onClick={() => startEdit(item)} style={{ fontSize: "0.75rem", padding: "5px 12px" }}>Edit</button>
+                                  <button className="btn-danger" onClick={() => handleDeleteItem(item.id, item.name)} style={{ fontSize: "0.75rem", padding: "5px 12px" }}>Delete</button>
                                 </div>
                               </div>
                             )}
