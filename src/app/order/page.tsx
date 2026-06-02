@@ -1,404 +1,327 @@
-"use client";
 // src/app/order/page.tsx
+"use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
-import type { MenuItem, Course } from "@/types";
-import { menuAPI, ordersAPI, courseAPI } from "@/lib/api";
+import { useMenu } from "@/hooks/useMenu";
+import type { MenuItem } from "@/types";
 
-const COURSE_LABELS: Record<Course, { label: string; emoji: string; next: string }> = {
-  STARTER: { label: "Starter", emoji: "🥗", next: "Main Course" },
-  MAIN: { label: "Main Course", emoji: "🍽️", next: "Dessert" },
-  DESSERT: { label: "Dessert", emoji: "🍰", next: "" },
-};
-
-const COURSE_ORDER: Course[] = ["STARTER", "MAIN", "DESSERT"];
+const CATEGORIES = ["All", "Main", "Drink", "Dessert", "Side"];
 
 export default function OrderPage() {
   const router = useRouter();
-
+  const { menu, loading, error } = useMenu(15000);
   const [studentName, setStudentName] = useState("");
-  const [tableNumber, setTableNumber] = useState("");
-  const [specialNotes, setSpecialNotes] = useState("");
-  const [menu, setMenu] = useState<Record<string, MenuItem[]>>({});
-  const [selected, setSelected] = useState<Record<string, string>>({});
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
-  const [openCourses, setOpenCourses] = useState<Course[]>([]);
-  const [currentCourse, setCurrentCourse] = useState<Course | null>(null); // what this student should order next
-  const [orderedCourses, setOrderedCourses] = useState<Course[]>([]); // what they've already ordered
-  const [loading, setLoading] = useState(true);
-  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [tableNumber, setTableNumber] = useState<number | "">("");
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [activeCategory, setActiveCategory] = useState("All");
   const [submitting, setSubmitting] = useState(false);
-  const [nameEntered, setNameEntered] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Step 1: Load open courses on mount
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const courseRes: any = await courseAPI.getActive();
-        setOpenCourses(courseRes.openCourses || []);
+  const filtered =
+    activeCategory === "All"
+      ? menu
+      : menu.filter((item) => item.category === activeCategory);
 
-        // Pre-fill from localStorage
-        const savedName = localStorage.getItem("pau_dinner_name");
-        const savedTable = localStorage.getItem("pau_dinner_table");
-        if (savedName) setStudentName(savedName);
-        if (savedTable) setTableNumber(savedTable);
-      } catch {
-        toast.error("Failed to load. Please refresh.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  // Step 2: When student enters name + table, check what course they should order
-  const checkStudentStatus = async () => {
-    const name = studentName.trim();
-    const tableNum = parseInt(tableNumber);
-
-    if (!name) { toast.error("Please enter your full name."); return; }
-    if (!tableNumber || isNaN(tableNum) || tableNum < 1 || tableNum > 24) {
-      toast.error("Please enter a valid table number (1–24)."); return;
-    }
-
-    setCheckingStatus(true);
-    try {
-      // Check what they've already ordered
-      const res = await fetch(`/api/orders/student-status?studentName=${encodeURIComponent(name)}&tableNumber=${tableNum}`);
-      const data = await res.json();
-      const alreadyOrdered: Course[] = data.orderedCourses || [];
-      setOrderedCourses(alreadyOrdered);
-
-      // Find what course they should order next
-      let nextCourse: Course | null = null;
-      for (const course of COURSE_ORDER) {
-        if (!openCourses.includes(course)) continue;
-        if (alreadyOrdered.includes(course)) continue;
-
-        // Check sequential: do they have all previous courses?
-        const courseIndex = COURSE_ORDER.indexOf(course);
-        const previousCourses = COURSE_ORDER.slice(0, courseIndex);
-        const missingPrevious = previousCourses.find((c) => !alreadyOrdered.includes(c));
-        if (missingPrevious) continue;
-
-        nextCourse = course;
-        break;
-      }
-
-      setCurrentCourse(nextCourse);
-
-      if (nextCourse) {
-        // Load menu for that course
-        const menuRes: any = await menuAPI.getAll(nextCourse);
-        setMenu(menuRes.grouped || {});
-      }
-
-      localStorage.setItem("pau_dinner_name", name);
-      localStorage.setItem("pau_dinner_table", String(tableNum));
-      setNameEntered(true);
-    } catch {
-      toast.error("Failed to check your status. Please try again.");
-    } finally {
-      setCheckingStatus(false);
-    }
-  };
-
-  const handleSelect = (category: string, itemId: string) => {
-    setSelected((prev) => ({ ...prev, [category]: itemId }));
-    setSelectedVariants((prev) => { const u = { ...prev }; delete u[itemId]; return u; });
-  };
-
-  const handleVariantSelect = (menuItemId: string, variant: string) => {
-    setSelectedVariants((prev) => ({ ...prev, [menuItemId]: variant }));
-  };
+  const categories = ["All", ...Array.from(new Set(menu.map((i) => i.category)))];
 
   const handleSubmit = async () => {
-    const tableNum = parseInt(tableNumber);
-    const selectedItems = Object.values(selected).filter(Boolean);
-    if (selectedItems.length === 0) { toast.error("Please select at least one item."); return; }
-
-    const allMenuItems = Object.values(menu).flat() as MenuItem[];
-    for (const itemId of selectedItems) {
-      const menuItem = allMenuItems.find((m) => m.id === itemId);
-      if (menuItem && menuItem.variants && menuItem.variants.length > 0) {
-        if (!selectedVariants[itemId]) {
-          toast.error(`Please choose an option for "${menuItem.name}".`); return;
-        }
-      }
-    }
+    if (!studentName.trim()) return setSubmitError("Please enter your name.");
+    if (!tableNumber || tableNumber < 1 || tableNumber > 24)
+      return setSubmitError("Please enter a valid table number (1–24).");
+    if (!selectedItem) return setSubmitError("Please select a menu item.");
 
     setSubmitting(true);
+    setSubmitError(null);
+
     try {
-      const res: any = await ordersAPI.place({
-        studentName: studentName.trim(),
-        tableNumber: tableNum,
-        items: selectedItems.map((itemId) => ({
-          menuItemId: itemId,
-          variant: selectedVariants[itemId] || null,
-        })),
-        specialNotes: specialNotes.trim() || undefined,
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentName: studentName.trim(),
+          tableNumber: Number(tableNumber),
+          menuItemId: selectedItem.id,
+        }),
       });
 
-      toast.success("Order placed!");
-      router.push(
-        `/confirmation?orderId=${res.order.id}&name=${encodeURIComponent(res.order.studentName)}&table=${tableNum}&course=${currentCourse}`
-      );
-    } catch (err: any) {
-      toast.error(err.message || "Failed to place order.");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data.error || "Failed to place order. Please try again.");
+        return;
+      }
+
+      // Store confirmation data and redirect
+      sessionStorage.setItem("orderConfirmation", JSON.stringify(data));
+      router.push("/confirmation");
+    } catch {
+      setSubmitError("Network error. Please check your connection and try again.");
+    } finally {
       setSubmitting(false);
     }
   };
 
-  const courseInfo = currentCourse ? COURSE_LABELS[currentCourse] : null;
-
-  // What message to show when no course available for this student
-  const getStatusMessage = () => {
-    if (openCourses.length === 0) return { title: "Ordering is Closed", body: "Please wait for the announcement.", emoji: "⏸" };
-
-    // They've ordered everything that's open
-    const allOrderedOrNotOpen = COURSE_ORDER.every((c) => orderedCourses.includes(c) || !openCourses.includes(c));
-    if (allOrderedOrNotOpen) {
-      const nextUnopenCourse = COURSE_ORDER.find((c) => !orderedCourses.includes(c) && !openCourses.includes(c));
-      if (nextUnopenCourse) {
-        return {
-          title: "You're all caught up!",
-          body: `You've ordered everything that's currently open. Come back when the ${COURSE_LABELS[nextUnopenCourse].label} opens!`,
-          emoji: "✅"
-        };
-      }
-      return { title: "All done!", body: "You've placed all your orders for tonight. Enjoy the evening!", emoji: "🎉" };
-    }
-
-    // They're missing a previous course
-    return {
-      title: "Previous course required",
-      body: `You need to order your Starter before you can access the Main Course or Dessert.`,
-      emoji: "⚠️"
-    };
-  };
-
   return (
-    <main style={{ minHeight: "100vh", background: "radial-gradient(ellipse at top, #1e1650 0%, #0d0826 70%)", padding: "0 0 60px" }}>
-      <div style={{ height: "3px", background: "linear-gradient(90deg, transparent, #c9a84c, #e8c97e, #c9a84c, transparent)" }} />
-
+    <div className="min-h-screen" style={{ background: "var(--charcoal)" }}>
       {/* Header */}
-      <div style={{ textAlign: "center", padding: "40px 20px 32px" }}>
-        <p style={{ fontSize: "0.7rem", letterSpacing: "0.25em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "8px" }}>
-          Pan-Atlantic University · Final Year Dinner
-        </p>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: 600, color: "#f5f0e8", marginBottom: "12px" }}>
-          Place Your Order
-        </h1>
-        {/* Show open courses */}
-        {openCourses.length > 0 && (
-          <div style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>
-            {openCourses.map((c) => (
-              <div key={c} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: "20px", padding: "6px 16px" }}>
-                <span style={{ fontSize: "16px" }}>{COURSE_LABELS[c].emoji}</span>
-                <span style={{ color: "#e8c97e", fontWeight: 600, fontSize: "0.85rem" }}>{COURSE_LABELS[c].label} open</span>
-              </div>
+      <header
+        className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between"
+        style={{
+          background: "rgba(26,21,16,0.95)",
+          backdropFilter: "blur(12px)",
+          borderBottom: "1px solid rgba(201,168,76,0.15)",
+        }}
+      >
+        <div>
+          <h1
+            className="text-2xl font-light"
+            style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}
+          >
+            PAU Dinner 2025
+          </h1>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Select your meal
+          </p>
+        </div>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: "1px solid rgba(201,168,76,0.3)" }}>
+          <span style={{ color: "var(--gold)", fontSize: "16px" }}>✦</span>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto px-6 py-8">
+        {/* Student Info */}
+        <section className="mb-8 fade-up">
+          <h2
+            className="text-xl font-light mb-4"
+            style={{ fontFamily: "var(--font-cormorant)", color: "var(--cream)" }}
+          >
+            Your Details
+          </h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs mb-2 tracking-widest uppercase" style={{ color: "var(--text-muted)" }}>
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                placeholder="e.g. Amaka Nwosu"
+                className="w-full px-4 py-3 text-sm outline-none transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(201,168,76,0.2)",
+                  borderRadius: "2px",
+                  color: "var(--cream)",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")}
+              />
+            </div>
+            <div>
+              <label className="block text-xs mb-2 tracking-widest uppercase" style={{ color: "var(--text-muted)" }}>
+                Table Number (1–24)
+              </label>
+              <input
+                type="number"
+                value={tableNumber}
+                onChange={(e) => setTableNumber(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 12"
+                min={1}
+                max={24}
+                className="w-full px-4 py-3 text-sm outline-none transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(201,168,76,0.2)",
+                  borderRadius: "2px",
+                  color: "var(--cream)",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.6)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Divider */}
+        <div className="mb-8" style={{ height: "1px", background: "rgba(201,168,76,0.12)" }} />
+
+        {/* Menu */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2
+              className="text-xl font-light"
+              style={{ fontFamily: "var(--font-cormorant)", color: "var(--cream)" }}
+            >
+              Choose Your Dish
+            </h2>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {menu.filter((i) => i.isAvailable && i.quantityRemaining > 0).length} available
+            </span>
+          </div>
+
+          {/* Category filter */}
+          <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className="flex-shrink-0 px-4 py-1.5 text-xs tracking-wider uppercase transition-all"
+                style={{
+                  borderRadius: "2px",
+                  border: activeCategory === cat ? "1px solid var(--gold)" : "1px solid rgba(201,168,76,0.2)",
+                  background: activeCategory === cat ? "rgba(201,168,76,0.12)" : "transparent",
+                  color: activeCategory === cat ? "var(--gold)" : "var(--text-muted)",
+                }}
+              >
+                {cat}
+              </button>
             ))}
           </div>
-        )}
-      </div>
 
-      <div style={{ maxWidth: "560px", margin: "0 auto", padding: "0 20px" }}>
-
-        {/* Loading */}
-        {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: "80px", borderRadius: "12px" }} />)}
-          </div>
-        )}
-
-        {/* Ordering closed */}
-        {!loading && openCourses.length === 0 && (
-          <div className="card" style={{ padding: "48px", textAlign: "center" }}>
-            <p style={{ fontSize: "3rem", marginBottom: "16px" }}>⏸</p>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color: "#f5f0e8", marginBottom: "12px" }}>Ordering is Closed</h2>
-            <p style={{ color: "#9b93b0", lineHeight: 1.7 }}>Please wait for the announcement before placing your order.</p>
-            <p style={{ color: "#c9a84c", fontSize: "0.85rem", marginTop: "16px", fontStyle: "italic" }}>Enjoy the evening!</p>
-          </div>
-        )}
-
-        {/* Step 1: Name + Table entry */}
-        {!loading && openCourses.length > 0 && !nameEntered && (
-          <div className="card" style={{ padding: "28px", marginBottom: "20px" }}>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e", marginBottom: "20px" }}>
-              Enter your details
-            </h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
-              <div>
-                <label className="label">Your Full Name *</label>
-                <input className="input-field" type="text" placeholder="e.g. Adaeze Okonkwo" value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && checkStudentStatus()} />
-              </div>
-              <div>
-                <label className="label">Table Number *</label>
-                <input className="input-field" type="number" min="1" max="24" placeholder="1 – 24" value={tableNumber}
-                  onChange={(e) => setTableNumber(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && checkStudentStatus()} />
-                <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginTop: "6px" }}>Your table number is on your place card 🪧</p>
-              </div>
+          {/* Menu items */}
+          {loading ? (
+            <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>
+              <div
+                className="w-6 h-6 border-2 rounded-full mx-auto mb-3 animate-spin"
+                style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }}
+              />
+              Loading menu...
             </div>
-            <button className="btn-gold" onClick={checkStudentStatus} disabled={checkingStatus}
-              style={{ width: "100%", padding: "14px", opacity: checkingStatus ? 0.7 : 1 }}>
-              {checkingStatus ? "Checking..." : "Continue →"}
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Show menu or status */}
-        {!loading && nameEntered && (
-          <>
-            {/* Student info strip */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", padding: "12px 16px", background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "10px" }}>
-              <div>
-                <p style={{ fontWeight: 500, color: "#f5f0e8", marginBottom: "2px" }}>{studentName}</p>
-                <p style={{ fontSize: "0.78rem", color: "#9b93b0" }}>Table {tableNumber}</p>
-              </div>
-              <button onClick={() => { setNameEntered(false); setCurrentCourse(null); setMenu({}); setSelected({}); setSelectedVariants({}); setOrderedCourses([]); }}
-                style={{ background: "none", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "6px", padding: "4px 10px", cursor: "pointer", color: "#9b93b0", fontSize: "0.75rem", fontFamily: "var(--font-body)" }}>
-                Change
-              </button>
-            </div>
-
-            {/* Already ordered badges */}
-            {orderedCourses.length > 0 && (
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "16px" }}>
-                {orderedCourses.map((c) => (
-                  <span key={c} style={{ fontSize: "0.72rem", padding: "3px 10px", borderRadius: "20px", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399", fontWeight: 600 }}>
-                    ✓ {COURSE_LABELS[c].label} ordered
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* No available course for this student */}
-            {!currentCourse && (() => {
-              const msg = getStatusMessage();
-              return (
-                <div className="card" style={{ padding: "48px", textAlign: "center" }}>
-                  <p style={{ fontSize: "3rem", marginBottom: "16px" }}>{msg.emoji}</p>
-                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color: "#f5f0e8", marginBottom: "12px" }}>{msg.title}</h2>
-                  <p style={{ color: "#9b93b0", lineHeight: 1.7 }}>{msg.body}</p>
-                </div>
-              );
-            })()}
-
-            {/* Order form for current course */}
-            {currentCourse && (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", padding: "10px 16px", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "10px" }}>
-                  <span style={{ fontSize: "20px" }}>{courseInfo?.emoji}</span>
-                  <div>
-                    <p style={{ color: "#c9a84c", fontWeight: 600, fontSize: "0.85rem" }}>Now ordering:</p>
-                    <p style={{ color: "#f5f0e8", fontWeight: 600 }}>{courseInfo?.label}</p>
-                  </div>
-                </div>
-
-                {/* Menu items */}
-                {Object.keys(menu).length === 0 ? (
-                  <div className="card" style={{ padding: "32px", textAlign: "center" }}>
-                    <p style={{ color: "#9b93b0" }}>No items available yet.</p>
-                  </div>
-                ) : (
-                  Object.entries(menu).map(([category, items]) => (
-                    <div key={category} className="card" style={{ padding: "24px", marginBottom: "20px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-                        <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e" }}>{category}</h2>
-                        <span style={{ fontSize: "0.7rem", color: "#9b93b0", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: "10px" }}>Pick one</span>
+          ) : error ? (
+            <p className="text-center py-8 text-red-400">{error}</p>
+          ) : (
+            <div className="grid gap-3">
+              {filtered.map((item) => {
+                const isUnavailable = !item.isAvailable || item.quantityRemaining === 0;
+                const isSelected = selectedItem?.id === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => !isUnavailable && setSelectedItem(item)}
+                    disabled={isUnavailable}
+                    className="w-full text-left p-4 transition-all relative"
+                    style={{
+                      background: isSelected
+                        ? "rgba(201,168,76,0.1)"
+                        : "rgba(255,255,255,0.03)",
+                      border: isSelected
+                        ? "1px solid rgba(201,168,76,0.5)"
+                        : "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: "2px",
+                      opacity: isUnavailable ? 0.45 : 1,
+                      cursor: isUnavailable ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isSelected && (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-0.5"
+                        style={{ background: "var(--gold)", borderRadius: "2px 0 0 2px" }}
+                      />
+                    )}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className="font-medium"
+                            style={{ color: isSelected ? "var(--gold)" : "var(--cream)", fontSize: "15px" }}
+                          >
+                            {item.name}
+                          </span>
+                          <span
+                            className="text-xs px-2 py-0.5"
+                            style={{
+                              background: "rgba(255,255,255,0.05)",
+                              borderRadius: "2px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {item.category}
+                          </span>
+                        </div>
+                        {item.description && (
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            {item.description}
+                          </p>
+                        )}
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {(items as MenuItem[]).map((item) => {
-                          const isSelected = selected[category] === item.id;
-                          const isUnavailable = !item.isAvailable;
-                          const isLow = item.quantity <= 5 && item.quantity > 0;
-                          const hasVariants = item.variants && item.variants.length > 0;
-                          const chosenVariant = selectedVariants[item.id];
-
-                          return (
-                            <div key={item.id}>
-                              <button onClick={() => !isUnavailable && handleSelect(category, item.id)} disabled={isUnavailable}
-                                style={{
-                                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                                  padding: "14px 16px", borderRadius: isSelected && hasVariants ? "10px 10px 0 0" : "10px",
-                                  border: "none", cursor: isUnavailable ? "not-allowed" : "pointer", width: "100%",
-                                  background: isSelected ? "rgba(201,168,76,0.15)" : isUnavailable ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)",
-                                  outline: isSelected ? "1.5px solid rgba(201,168,76,0.6)" : "1.5px solid transparent",
-                                  transition: "all 0.2s ease", opacity: isUnavailable ? 0.4 : 1, textAlign: "left",
-                                }}>
-                                <div style={{ flex: 1 }}>
-                                  <p style={{ fontWeight: 500, color: isUnavailable ? "#9b93b0" : "#f5f0e8", textDecoration: isUnavailable ? "line-through" : "none", marginBottom: item.description ? "2px" : 0 }}>
-                                    {item.name}
-                                  </p>
-                                  {item.description && <p style={{ fontSize: "0.8rem", color: "#9b93b0" }}>{item.description}</p>}
-                                  {hasVariants && !isSelected && (
-                                    <p style={{ fontSize: "0.75rem", color: "#c9a84c", marginTop: "2px" }}>Choose: {item.variants!.join(" / ")}</p>
-                                  )}
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "12px" }}>
-                                  {isLow && !isUnavailable && (
-                                    <span style={{ fontSize: "0.7rem", color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "2px 8px", borderRadius: "10px", border: "1px solid rgba(245,158,11,0.2)" }}>{item.quantity} left</span>
-                                  )}
-                                  {isUnavailable && <span style={{ fontSize: "0.7rem", color: "#e05252", background: "rgba(224,82,82,0.1)", padding: "2px 8px", borderRadius: "10px" }}>Sold out</span>}
-                                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", flexShrink: 0, border: isSelected ? "none" : "2px solid rgba(201,168,76,0.3)", background: isSelected ? "#c9a84c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    {isSelected && <span style={{ fontSize: "11px", color: "#0d0826", fontWeight: 700 }}>✓</span>}
-                                  </div>
-                                </div>
-                              </button>
-
-                              {/* Variant dropdown */}
-                              {isSelected && hasVariants && (
-                                <div style={{ background: "rgba(201,168,76,0.06)", border: "1.5px solid rgba(201,168,76,0.6)", borderTop: "1px solid rgba(201,168,76,0.2)", borderRadius: "0 0 10px 10px", padding: "14px 16px" }}>
-                                  <label style={{ display: "block", fontSize: "0.75rem", color: "#c9a84c", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "10px" }}>
-                                    Choose your option *
-                                  </label>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {item.variants!.map((variant) => {
-                                      const isChosen = chosenVariant === variant;
-                                      return (
-                                        <button key={variant} onClick={() => handleVariantSelect(item.id, variant)}
-                                          style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", borderRadius: "8px", border: "none", cursor: "pointer", background: isChosen ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.04)", outline: isChosen ? "1.5px solid rgba(201,168,76,0.5)" : "1.5px solid transparent", transition: "all 0.15s ease", textAlign: "left", width: "100%" }}>
-                                          <div style={{ width: "16px", height: "16px", borderRadius: "50%", flexShrink: 0, border: isChosen ? "none" : "2px solid rgba(201,168,76,0.4)", background: isChosen ? "#c9a84c" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                            {isChosen && <span style={{ fontSize: "9px", color: "#0d0826", fontWeight: 700 }}>✓</span>}
-                                          </div>
-                                          <span style={{ color: isChosen ? "#f5f0e8" : "#9b93b0", fontWeight: isChosen ? 500 : 400, fontSize: "0.9rem" }}>{variant}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div className="text-right flex-shrink-0">
+                        {isUnavailable ? (
+                          <span className="text-xs text-red-400 font-medium">Sold Out</span>
+                        ) : (
+                          <span
+                            className={`text-xs font-medium ${item.quantityRemaining <= 5 ? "text-amber-400" : ""}`}
+                            style={{ color: item.quantityRemaining <= 5 ? "#fbbf24" : "var(--text-muted)" }}
+                          >
+                            {item.quantityRemaining <= 5
+                              ? `⚠ ${item.quantityRemaining} left`
+                              : `${item.quantityRemaining} left`}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  ))
-                )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-                {/* Special notes */}
-                <div className="card" style={{ padding: "24px", marginBottom: "24px" }}>
-                  <label className="label">Special Notes (Optional)</label>
-                  <textarea className="input-field" rows={3} placeholder="Allergies, dietary restrictions..." value={specialNotes} onChange={(e) => setSpecialNotes(e.target.value)} style={{ resize: "vertical" }} />
-                </div>
-
-                <button className="btn-gold" onClick={handleSubmit} disabled={submitting} style={{ width: "100%", fontSize: "1rem", padding: "16px", opacity: submitting ? 0.7 : 1 }}>
-                  {submitting ? "Placing Order..." : `Place My ${courseInfo?.label} Order →`}
-                </button>
-
-                <p style={{ textAlign: "center", fontSize: "0.78rem", color: "#9b93b0", marginTop: "16px", lineHeight: 1.6 }}>
-                  Your selection is locked in immediately. Food is served on a first-come, first-served basis.
-                </p>
-              </>
-            )}
-          </>
+        {/* Submit */}
+        {submitError && (
+          <p
+            className="mb-4 text-sm px-4 py-3"
+            style={{
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.2)",
+              borderRadius: "2px",
+              color: "#fca5a5",
+            }}
+          >
+            {submitError}
+          </p>
         )}
+
+        {selectedItem && (
+          <div
+            className="mb-4 p-4"
+            style={{
+              background: "rgba(201,168,76,0.07)",
+              border: "1px solid rgba(201,168,76,0.2)",
+              borderRadius: "2px",
+            }}
+          >
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>
+              Selected
+            </p>
+            <p className="font-medium" style={{ color: "var(--gold)", fontFamily: "var(--font-cormorant)", fontSize: "18px" }}>
+              {selectedItem.name}
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !selectedItem || !studentName || !tableNumber}
+          className="w-full py-4 font-medium tracking-widest uppercase text-sm transition-all"
+          style={{
+            background:
+              !selectedItem || !studentName || !tableNumber
+                ? "rgba(201,168,76,0.2)"
+                : "linear-gradient(135deg, var(--gold-dark), var(--gold), var(--gold-light))",
+            color: !selectedItem || !studentName || !tableNumber ? "var(--text-muted)" : "var(--charcoal)",
+            borderRadius: "2px",
+            cursor: !selectedItem || !studentName || !tableNumber ? "not-allowed" : "pointer",
+          }}
+        >
+          {submitting ? "Placing Order..." : "Confirm Order"}
+        </button>
+
+        <p className="text-center text-xs mt-4" style={{ color: "var(--text-muted)", opacity: 0.5 }}>
+          Orders cannot be changed after submission
+        </p>
       </div>
-    </main>
+    </div>
   );
 }

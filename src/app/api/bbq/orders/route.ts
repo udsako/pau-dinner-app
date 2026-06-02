@@ -1,17 +1,14 @@
 // src/app/api/bbq/orders/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// POST /api/bbq/orders — Public (student submits BBQ order)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { studentName, department, proteinChoiceId, starchChoiceId, confirmedItems } = body;
 
-    // Validation
     if (!studentName?.trim())
       return NextResponse.json({ error: "Full name is required." }, { status: 400 });
     if (!department?.trim())
@@ -21,26 +18,19 @@ export async function POST(req: NextRequest) {
     if (!starchChoiceId)
       return NextResponse.json({ error: "Please select a starch choice." }, { status: 400 });
     if (!confirmedItems || !Array.isArray(confirmedItems) || confirmedItems.length === 0)
-      return NextResponse.json(
-        { error: "Please confirm all compulsory items." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Please confirm all compulsory items." }, { status: 400 });
 
-    // Atomically decrement stock for protein and starch choices
     const order = await prisma.$transaction(async (tx) => {
-      // Check and decrement protein
       const protein = await tx.bbqMenuItem.findUnique({ where: { id: proteinChoiceId } });
       if (!protein) throw new Error("PROTEIN_NOT_FOUND");
       if (!protein.isAvailable || protein.quantity - protein.quantityReserved <= 0)
         throw new Error("PROTEIN_SOLD_OUT");
 
-      // Check and decrement starch
       const starch = await tx.bbqMenuItem.findUnique({ where: { id: starchChoiceId } });
       if (!starch) throw new Error("STARCH_NOT_FOUND");
       if (!starch.isAvailable || starch.quantity - starch.quantityReserved <= 0)
         throw new Error("STARCH_SOLD_OUT");
 
-      // Validate compulsory items exist
       const compulsoryItems = await tx.bbqMenuItem.findMany({
         where: { id: { in: confirmedItems }, category: "COMPULSORY" },
       });
@@ -51,7 +41,6 @@ export async function POST(req: NextRequest) {
         throw new Error("MISSING_CONFIRMATIONS");
       }
 
-      // Decrement stock for protein and starch
       await tx.bbqMenuItem.update({
         where: { id: proteinChoiceId },
         data: { quantityReserved: { increment: 1 } },
@@ -61,7 +50,6 @@ export async function POST(req: NextRequest) {
         data: { quantityReserved: { increment: 1 } },
       });
 
-      // Create the BBQ order
       return tx.bbqOrder.create({
         data: {
           studentName: studentName.trim(),
@@ -77,7 +65,6 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    // Post-transaction: check if protein/starch just sold out and disable
     for (const itemId of [proteinChoiceId, starchChoiceId]) {
       const item = await prisma.bbqMenuItem.findUnique({ where: { id: itemId } });
       if (item && item.quantity - item.quantityReserved <= 0) {
@@ -118,10 +105,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/bbq/orders — Admin only (returns all BBQ orders for the table view)
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const user = requireAuth(req, ["ADMIN"]);
+  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   try {
     const { searchParams } = new URL(req.url);

@@ -1,11 +1,10 @@
 // src/app/api/bbq/menu/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/bbq/menu — Public (used by student BBQ order form)
+// GET /api/bbq/menu — Public
 export async function GET() {
   try {
     const items = await prisma.bbqMenuItem.findMany({
@@ -26,8 +25,8 @@ export async function GET() {
 
 // POST /api/bbq/menu — Admin only
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const user = requireAuth(req, ["ADMIN"]);
+  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   try {
     const body = await req.json();
@@ -48,7 +47,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enforce max 2 items for PROTEIN and STARCH categories
     if (category === "PROTEIN" || category === "STARCH") {
       const existing = await prisma.bbqMenuItem.count({
         where: { category },

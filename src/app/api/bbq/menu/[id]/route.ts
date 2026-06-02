@@ -1,17 +1,15 @@
 // src/app/api/bbq/menu/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// PATCH /api/bbq/menu/:id — Admin only
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const user = requireAuth(req, ["ADMIN"]);
+  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   try {
     const body = await req.json();
@@ -37,13 +35,12 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/bbq/menu/:id — Admin only
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const user = requireAuth(req, ["ADMIN"]);
+  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   try {
     await prisma.bbqMenuItem.delete({ where: { id: params.id } });
