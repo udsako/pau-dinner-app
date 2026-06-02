@@ -39,9 +39,6 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const user = requireAuth(req, ["ADMIN"]);
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
   try {
     await prisma.bbqMenuItem.delete({ where: { id: params.id } });
     return NextResponse.json({ message: "BBQ item deleted." });
