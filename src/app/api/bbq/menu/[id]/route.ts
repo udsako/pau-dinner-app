@@ -1,22 +1,20 @@
 // src/app/api/bbq/menu/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = requireAuth(req, ["ADMIN"]);
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const { id } = await params;
 
   try {
     const body = await req.json();
     const { name, description, quantity, isAvailable } = body;
 
     const item = await prisma.bbqMenuItem.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
@@ -37,10 +35,12 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
-    await prisma.bbqMenuItem.delete({ where: { id: params.id } });
+    await prisma.bbqMenuItem.delete({ where: { id } });
     return NextResponse.json({ message: "BBQ item deleted." });
   } catch (error) {
     console.error("DELETE /api/bbq/menu/[id] error:", error);
