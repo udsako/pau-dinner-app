@@ -29,7 +29,7 @@ export interface DinnerTable {
   capacity: number;
   status: TableStatus;
   dispatchedAt?: string;
-  residualDeadline?: string;\
+  residualDeadline?: string;
   orderedCount: number;
   pendingCount: number;
   quorumMetAt?: string;
