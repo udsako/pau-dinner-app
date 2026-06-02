@@ -1,10 +1,8 @@
 // src/app/api/bbq/menu/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/bbq/menu — Public
 export async function GET() {
   try {
     const items = await prisma.bbqMenuItem.findMany({
@@ -23,11 +21,7 @@ export async function GET() {
   }
 }
 
-// POST /api/bbq/menu — Admin only
 export async function POST(req: NextRequest) {
-  const user = requireAuth(req, ["ADMIN"]);
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
   try {
     const body = await req.json();
     const { name, description, category, quantity } = body;
