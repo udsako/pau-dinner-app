@@ -1,151 +1,171 @@
-﻿// src/app/page.tsx
-"use client";
+﻿"use client";
+// src/app/page.tsx
 
 import Link from "next/link";
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-6">
-      {/* Background texture */}
-      <div
-        className="absolute inset-0 opacity-5"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c9a84c' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }}
-      />
-      <div
-        className="absolute inset-0 opacity-20"
-        style={{ background: "radial-gradient(ellipse 60% 50% at 50% 50%, #c9a84c22 0%, transparent 70%)" }}
-      />
-      <div
-        className="absolute top-0 left-0 right-0 h-px"
-        style={{ background: "linear-gradient(90deg, transparent, #c9a84c, transparent)" }}
-      />
+    <main style={{
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "radial-gradient(ellipse at top, #1e1650 0%, #0d0826 70%)",
+      padding: "24px",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      {/* Top gold bar */}
+      <div style={{ height: "3px", position: "fixed", top: 0, left: 0, right: 0, background: "linear-gradient(90deg, transparent, #c9a84c, #e8c97e, #c9a84c, transparent)" }} />
 
-      <div className="relative z-10 text-center max-w-3xl fade-up">
+      {/* Subtle background glow */}
+      <div style={{
+        position: "absolute", inset: 0, opacity: 0.15,
+        background: "radial-gradient(ellipse 80% 60% at 50% 20%, #c9a84c33 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
+
+      <div style={{ position: "relative", zIndex: 10, textAlign: "center", maxWidth: "560px", width: "100%" }}>
+
         {/* Badge */}
-        <div className="inline-block mb-6">
-          <span
-            className="text-xs font-medium tracking-[0.3em] uppercase px-4 py-2 rounded-full"
-            style={{ border: "1px solid rgba(201,168,76,0.3)", background: "rgba(201,168,76,0.07)", color: "var(--gold)" }}
-          >
+        <div style={{ marginBottom: "20px" }}>
+          <span style={{
+            fontSize: "0.65rem", letterSpacing: "0.25em", textTransform: "uppercase",
+            color: "#c9a84c", border: "1px solid rgba(201,168,76,0.3)",
+            background: "rgba(201,168,76,0.07)", borderRadius: "20px",
+            padding: "6px 16px",
+          }}>
             Pan-Atlantic University · Class of 2026
           </span>
         </div>
 
-        <h1
-          className="text-6xl md:text-8xl font-light mb-4 leading-none"
-          style={{ fontFamily: "var(--font-cormorant)", letterSpacing: "-0.02em" }}
-        >
-          <span className="gold-shimmer">Final Year</span>
+        {/* Title */}
+        <h1 style={{
+          fontFamily: "var(--font-display)",
+          fontSize: "clamp(2.8rem, 10vw, 5rem)",
+          fontWeight: 300,
+          lineHeight: 1.1,
+          marginBottom: "12px",
+          color: "#f5f0e8",
+        }}>
+          Final Year
           <br />
-          <span style={{ color: "var(--cream)" }}>Events</span>
+          <span style={{
+            background: "linear-gradient(135deg, #c9a84c, #e8c97e, #c9a84c)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}>
+            Events
+          </span>
         </h1>
 
-        <div className="w-16 h-px mx-auto my-6" style={{ background: "linear-gradient(90deg, transparent, var(--gold), transparent)" }} />
+        {/* Divider */}
+        <div style={{ width: "48px", height: "1px", background: "linear-gradient(90deg, transparent, #c9a84c, transparent)", margin: "20px auto" }} />
 
-        <p className="text-lg mb-2" style={{ color: "var(--text-muted)", fontFamily: "var(--font-dm)" }}>
-          Choose your event below to place your order
-        </p>
-        <p className="text-sm mb-12" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
-          Select your dish and let us take care of the rest.
+        <p style={{ fontSize: "0.9rem", color: "#9b93b0", marginBottom: "40px", lineHeight: 1.6 }}>
+          Select your event and place your order below.
         </p>
 
-        {/* Event Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-2xl mx-auto">
-          {/* Dinner Card */}
-          <Link
-            href="/order"
-            className="group relative flex flex-col items-start p-8 text-left transition-all duration-300"
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(201,168,76,0.2)",
-              borderRadius: "4px",
-            }}
-            onMouseOver={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(201,168,76,0.07)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.5)";
-            }}
-            onMouseOut={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.2)";
-            }}
-          >
+        {/* Cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "32px" }}>
+
+          {/* Dinner */}
+          <Link href="/order" style={{ textDecoration: "none" }}>
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center mb-5"
-              style={{ background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.3)" }}
+              className="event-card"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(201,168,76,0.2)",
+                borderRadius: "16px",
+                padding: "28px 20px",
+                textAlign: "left",
+                transition: "all 0.25s ease",
+                cursor: "pointer",
+              }}
+              onMouseOver={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(201,168,76,0.08)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.5)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+              }}
+              onMouseOut={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.2)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+              }}
             >
-              <span style={{ fontSize: "20px" }}>🍽️</span>
+              <div style={{
+                width: "44px", height: "44px", borderRadius: "12px",
+                background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.25)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "22px", marginBottom: "16px",
+              }}>🍽️</div>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", color: "#e8c97e", marginBottom: "6px", fontWeight: 400 }}>
+                Dinner
+              </h2>
+              <p style={{ fontSize: "0.75rem", color: "#9b93b0", lineHeight: 1.5, marginBottom: "16px" }}>
+                Seated dining, table-based ordering.
+              </p>
+              <span style={{ fontSize: "0.7rem", color: "#c9a84c", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Order now →
+              </span>
             </div>
-            <h2
-              className="text-3xl font-light mb-2"
-              style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}
-            >
-              Dinner
-            </h2>
-            <p className="text-sm mb-5" style={{ color: "var(--text-muted)" }}>
-              Final Year Dinner — seated dining, table-based ordering for 240 students.
-            </p>
-            <span
-              className="text-xs tracking-widest uppercase flex items-center gap-2"
-              style={{ color: "var(--gold)" }}
-            >
-              Order Now <span>→</span>
-            </span>
           </Link>
 
-          {/* BBQ Card */}
-          <Link
-            href="/bbq"
-            className="group relative flex flex-col items-start p-8 text-left transition-all duration-300"
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(201,168,76,0.2)",
-              borderRadius: "4px",
-            }}
-            onMouseOver={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(201,168,76,0.07)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.5)";
-            }}
-            onMouseOut={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.2)";
-            }}
-          >
+          {/* BBQ */}
+          <Link href="/bbq" style={{ textDecoration: "none" }}>
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center mb-5"
-              style={{ background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.3)" }}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(201,168,76,0.2)",
+                borderRadius: "16px",
+                padding: "28px 20px",
+                textAlign: "left",
+                transition: "all 0.25s ease",
+                cursor: "pointer",
+              }}
+              onMouseOver={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(201,168,76,0.08)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.5)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+              }}
+              onMouseOut={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.2)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+              }}
             >
-              <span style={{ fontSize: "20px" }}>🔥</span>
+              <div style={{
+                width: "44px", height: "44px", borderRadius: "12px",
+                background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.25)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "22px", marginBottom: "16px",
+              }}>🔥</div>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", color: "#e8c97e", marginBottom: "6px", fontWeight: 400 }}>
+                BBQ
+              </h2>
+              <p style={{ fontSize: "0.75rem", color: "#9b93b0", lineHeight: 1.5, marginBottom: "16px" }}>
+                Choose your protein, starch & more.
+              </p>
+              <span style={{ fontSize: "0.7rem", color: "#c9a84c", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Order now →
+              </span>
             </div>
-            <h2
-              className="text-3xl font-light mb-2"
-              style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}
-            >
-              BBQ
-            </h2>
-            <p className="text-sm mb-5" style={{ color: "var(--text-muted)" }}>
-              BBQ Night — choose your protein & starch, confirm your included items.
-            </p>
-            <span
-              className="text-xs tracking-widest uppercase flex items-center gap-2"
-              style={{ color: "var(--gold)" }}
-            >
-              Order Now <span>→</span>
-            </span>
           </Link>
         </div>
 
-        <p className="mt-8 text-xs" style={{ color: "var(--text-muted)", opacity: 0.5 }}>
+        <p style={{ fontSize: "0.75rem", color: "#9b93b0", opacity: 0.6 }}>
           Admin?{" "}
-          <Link href="/admin/login" className="underline" style={{ color: "var(--gold)" }}>
+          <Link href="/admin/login" style={{ color: "#c9a84c", textDecoration: "none", fontWeight: 500 }}>
             Sign in here
           </Link>
         </p>
       </div>
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center">
-        <p className="text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-muted)", opacity: 0.3 }}>
+      {/* Bottom label */}
+      <div style={{ position: "absolute", bottom: "24px", left: "50%", transform: "translateX(-50%)" }}>
+        <p style={{ fontSize: "0.6rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#9b93b0", opacity: 0.4 }}>
           PAU · 2026
         </p>
       </div>

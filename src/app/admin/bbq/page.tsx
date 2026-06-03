@@ -33,6 +33,7 @@ export default function AdminBbqPage() {
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("pau_dinner_token");
@@ -126,15 +127,31 @@ export default function AdminBbqPage() {
       const res = await fetch(`/api/bbq/menu/${id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       toast.dismiss(loadingToast);
-      if (!res.ok) {
-        toast.error(data.error || `Delete failed (${res.status})`);
-        return;
-      }
+      if (!res.ok) { toast.error(data.error || `Delete failed (${res.status})`); return; }
       toast.success(`"${name}" deleted.`);
       fetchMenu();
-    } catch (err) {
+    } catch {
       toast.dismiss(loadingToast);
       toast.error("Network error — delete failed.");
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm("⚠️ This will permanently delete ALL BBQ orders from the database. This affects everyone who has ordered. Are you sure?")) return;
+    if (!window.confirm("Second confirmation — are you absolutely sure? This cannot be undone.")) return;
+    setResetting(true);
+    try {
+      const res = await fetch("/api/bbq/reset", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "Reset failed."); return; }
+      toast.success(data.message);
+      setOrders([]);
+      fetchMenu();
+      fetchOrders();
+    } catch {
+      toast.error("Reset failed.");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -218,6 +235,7 @@ export default function AdminBbqPage() {
         {/* ══ ORDERS TAB ══ */}
         {activeTab === "orders" && (
           <div>
+            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {[
                 { label: "Total Orders", value: orders.length, icon: "📋" },
@@ -234,6 +252,7 @@ export default function AdminBbqPage() {
               ))}
             </div>
 
+            {/* Starch stats */}
             {Object.keys(starchStats).length > 0 && (
               <div className="grid grid-cols-2 gap-4 mb-8">
                 {Object.entries(starchStats).map(([name, count]) => (
@@ -248,6 +267,7 @@ export default function AdminBbqPage() {
               </div>
             )}
 
+            {/* Filters + Export + Reset */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "20px", alignItems: "center" }}>
               <input
                 type="text"
@@ -262,14 +282,38 @@ export default function AdminBbqPage() {
                 <option value="">All Departments</option>
                 {uniqueDepts.map((d) => <option key={d} value={d} style={{ background: "#1a1510" }}>{d}</option>)}
               </select>
-              <button onClick={() => fetchOrders()} className="btn-ghost" style={{ fontSize: "0.8rem" }}>Refresh</button>
-              <button onClick={exportCSV} className="btn-gold" style={{ fontSize: "0.8rem" }}>↓ Export CSV</button>
+              <button onClick={() => fetchOrders()} className="btn-ghost" style={{ fontSize: "0.8rem" }}>
+                Refresh
+              </button>
+              <button onClick={exportCSV} className="btn-gold" style={{ fontSize: "0.8rem" }}>
+                ↓ Export CSV
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                style={{
+                  background: "rgba(224,82,82,0.1)",
+                  color: "#e05252",
+                  border: "1px solid rgba(224,82,82,0.3)",
+                  borderRadius: "8px",
+                  padding: "8px 14px",
+                  cursor: resetting ? "not-allowed" : "pointer",
+                  fontSize: "0.8rem",
+                  fontFamily: "var(--font-body)",
+                  fontWeight: 500,
+                  opacity: resetting ? 0.7 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {resetting ? "Resetting..." : "🔄 Reset BBQ Orders"}
+              </button>
             </div>
 
             <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginBottom: "16px" }}>
               Showing {filteredOrders.length} of {orders.length} orders
             </p>
 
+            {/* Orders Table */}
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
                 <thead>
@@ -315,7 +359,6 @@ export default function AdminBbqPage() {
         {/* ══ MENU TAB ══ */}
         {activeTab === "menu" && (
           <div>
-            {/* Add Item Form */}
             <div className="card" style={{ padding: "24px", marginBottom: "32px" }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e", marginBottom: "20px" }}>
                 Add BBQ Menu Item
@@ -351,7 +394,6 @@ export default function AdminBbqPage() {
               <button className="btn-gold" onClick={handleAddItem}>+ Add Item</button>
             </div>
 
-            {/* Existing Items */}
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#f5f0e8", marginBottom: "16px" }}>
               BBQ Menu Items
             </h2>
