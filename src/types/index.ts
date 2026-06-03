@@ -19,6 +19,8 @@ export interface MenuItem {
   quantityRemaining: number;
   isAvailable: boolean;
   category: string;
+  course: Course;
+  variants?: string[];   // ← this line must be here
   createdAt: string;
   updatedAt: string;
 }
