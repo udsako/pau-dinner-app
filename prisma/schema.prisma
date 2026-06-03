@@ -51,10 +51,10 @@ model User {
 }
 
 model CourseControl {
-  id             String   @id @default(cuid())
-  openCourses    String[] @default([]) // ["STARTER", "MAIN"] etc
-  updatedAt      DateTime @updatedAt
-  updatedBy      String?
+  id          String   @id @default(cuid())
+  openCourses String[] @default([])
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
 }
 
 model MenuItem {
@@ -161,4 +161,27 @@ model BbqOrder {
   starchChoice  BbqMenuItem @relation("StarchChoice",  fields: [starchChoiceId],  references: [id])
 
   @@map("bbq_orders")
+}
+
+model MovieMenuItem {
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  quantity         Int
+  quantityReserved Int      @default(0)
+  isAvailable      Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("movie_menu_items")
+}
+
+model MovieOrder {
+  id             String   @id @default(uuid())
+  studentName    String
+  department     String
+  confirmedItems Json
+  orderedAt      DateTime @default(now())
+
+  @@map("movie_orders")
 }

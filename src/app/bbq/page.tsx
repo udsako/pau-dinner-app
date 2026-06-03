@@ -1,5 +1,5 @@
-// src/app/bbq/page.tsx
 "use client";
+// src/app/bbq/page.tsx
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -10,18 +10,16 @@ const DEPARTMENTS = [
   "Computer Science",
   "Economics",
   "Mass Communication",
-  "Law",
+  "ISMS",
   "Accounting",
-  "Political Science",
-  "Psychology",
-  "Information Technology",
-  "Entrepreneurship",
-  "Other",
+  "Strategic Communication",
+  "Mechanical Engineering",
+  "Electrical Engineering",
+  "Finance",
 ];
 
 export default function BbqOrderPage() {
   const router = useRouter();
-
   const [menu, setMenu] = useState<BbqMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -37,14 +35,36 @@ export default function BbqOrderPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/bbq/menu")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setMenu(data);
-        else setMenuError("Failed to load menu.");
-      })
-      .catch(() => setMenuError("Network error loading menu."))
-      .finally(() => setLoading(false));
+    let attempts = 0;
+    const MAX = 3;
+
+    const tryFetch = () => {
+      attempts++;
+      fetch("/api/bbq/menu")
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setMenu(data);
+            setMenuError(null);
+            setLoading(false);
+          } else {
+            throw new Error("Invalid response");
+          }
+        })
+        .catch(() => {
+          if (attempts < MAX) {
+            setTimeout(tryFetch, 1500);
+          } else {
+            setMenuError("Failed to load menu. Please refresh the page.");
+            setLoading(false);
+          }
+        });
+    };
+
+    tryFetch();
   }, []);
 
   const compulsoryItems = menu.filter((i) => i.category === "COMPULSORY" && i.isAvailable);
@@ -114,8 +134,6 @@ export default function BbqOrderPage() {
     }
   };
 
-  // ─── Shared styles ───────────────────────────────────────────────────────────
-
   const sectionTitle = {
     fontFamily: "var(--font-cormorant)",
     color: "var(--cream)",
@@ -141,8 +159,6 @@ export default function BbqOrderPage() {
     margin: "28px 0",
   };
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen" style={{ background: "var(--charcoal)" }}>
       {/* Header */}
@@ -158,7 +174,7 @@ export default function BbqOrderPage() {
           <h1 className="text-2xl font-light" style={{ fontFamily: "var(--font-cormorant)", color: "var(--gold)" }}>
             🔥 BBQ Night
           </h1>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>PAU Class of 2025</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>PAU Class of 2026</p>
         </div>
         <span
           className="text-xs px-3 py-1"
@@ -241,7 +257,16 @@ export default function BbqOrderPage() {
               Loading menu...
             </div>
           ) : menuError ? (
-            <p className="text-red-400 text-sm">{menuError}</p>
+            <div>
+              <p className="text-sm mb-3" style={{ color: "#fca5a5" }}>{menuError}</p>
+              <button
+                onClick={() => { setMenuError(null); setLoading(true); window.location.reload(); }}
+                className="text-xs underline"
+                style={{ color: "var(--gold)" }}
+              >
+                Tap to retry
+              </button>
+            </div>
           ) : compulsoryItems.length === 0 ? (
             <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
               No compulsory items have been added yet.
@@ -261,7 +286,6 @@ export default function BbqOrderPage() {
                       borderRadius: "2px",
                     }}
                   >
-                    {/* Checkbox */}
                     <div
                       className="flex-shrink-0 mt-0.5 w-5 h-5 rounded flex items-center justify-center transition-all"
                       style={{
@@ -275,7 +299,6 @@ export default function BbqOrderPage() {
                         </svg>
                       )}
                     </div>
-
                     <div>
                       <p className="text-sm font-medium" style={{ color: checked ? "#34d399" : "var(--cream)" }}>
                         {item.name}
@@ -292,12 +315,9 @@ export default function BbqOrderPage() {
             </div>
           )}
 
-          {/* Confirm-all nudge */}
           {compulsoryItems.length > 0 && !allCompulsoryConfirmed && (
             <button
-              onClick={() =>
-                setConfirmedItems(new Set(compulsoryItems.map((i) => i.id)))
-              }
+              onClick={() => setConfirmedItems(new Set(compulsoryItems.map((i) => i.id)))}
               className="mt-3 text-xs underline"
               style={{ color: "var(--gold)", opacity: 0.7 }}
             >
@@ -318,7 +338,11 @@ export default function BbqOrderPage() {
             Pick <strong style={{ color: "var(--cream)" }}>one</strong> option below.
           </p>
 
-          {loading ? null : proteinOptions.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-4" style={{ color: "var(--text-muted)" }}>
+              <div className="w-5 h-5 border-2 rounded-full mx-auto animate-spin" style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }} />
+            </div>
+          ) : proteinOptions.length === 0 ? (
             <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
               No protein options available yet.
             </p>
@@ -342,7 +366,6 @@ export default function BbqOrderPage() {
                       position: "relative",
                     }}
                   >
-                    {/* Selected ring */}
                     {selected && (
                       <div
                         className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
@@ -356,24 +379,14 @@ export default function BbqOrderPage() {
                     <span style={{ fontSize: "28px", marginBottom: "8px" }}>
                       {item.name.toLowerCase().includes("turkey") ? "🦃" : "🐟"}
                     </span>
-                    <span
-                      className="font-medium text-sm"
-                      style={{ color: selected ? "var(--gold)" : "var(--cream)" }}
-                    >
+                    <span className="font-medium text-sm" style={{ color: selected ? "var(--gold)" : "var(--cream)" }}>
                       {item.name}
                     </span>
                     {soldOut ? (
                       <span className="text-xs mt-1 text-red-400">Sold Out</span>
                     ) : (
-                      <span
-                        className="text-xs mt-1"
-                        style={{
-                          color: item.quantityRemaining <= 10 ? "#fbbf24" : "var(--text-muted)",
-                        }}
-                      >
-                        {item.quantityRemaining <= 10
-                          ? `⚠ ${item.quantityRemaining} left`
-                          : `${item.quantityRemaining} left`}
+                      <span className="text-xs mt-1" style={{ color: item.quantityRemaining <= 10 ? "#fbbf24" : "var(--text-muted)" }}>
+                        {item.quantityRemaining <= 10 ? `⚠ ${item.quantityRemaining} left` : `${item.quantityRemaining} left`}
                       </span>
                     )}
                   </button>
@@ -395,7 +408,11 @@ export default function BbqOrderPage() {
             Pick <strong style={{ color: "var(--cream)" }}>one</strong> option below.
           </p>
 
-          {loading ? null : starchOptions.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-4" style={{ color: "var(--text-muted)" }}>
+              <div className="w-5 h-5 border-2 rounded-full mx-auto animate-spin" style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }} />
+            </div>
+          ) : starchOptions.length === 0 ? (
             <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
               No starch options available yet.
             </p>
@@ -432,24 +449,14 @@ export default function BbqOrderPage() {
                     <span style={{ fontSize: "28px", marginBottom: "8px" }}>
                       {item.name.toLowerCase().includes("yam") ? "🍠" : "🍌"}
                     </span>
-                    <span
-                      className="font-medium text-sm"
-                      style={{ color: selected ? "var(--gold)" : "var(--cream)" }}
-                    >
+                    <span className="font-medium text-sm" style={{ color: selected ? "var(--gold)" : "var(--cream)" }}>
                       {item.name}
                     </span>
                     {soldOut ? (
                       <span className="text-xs mt-1 text-red-400">Sold Out</span>
                     ) : (
-                      <span
-                        className="text-xs mt-1"
-                        style={{
-                          color: item.quantityRemaining <= 10 ? "#fbbf24" : "var(--text-muted)",
-                        }}
-                      >
-                        {item.quantityRemaining <= 10
-                          ? `⚠ ${item.quantityRemaining} left`
-                          : `${item.quantityRemaining} left`}
+                      <span className="text-xs mt-1" style={{ color: item.quantityRemaining <= 10 ? "#fbbf24" : "var(--text-muted)" }}>
+                        {item.quantityRemaining <= 10 ? `⚠ ${item.quantityRemaining} left` : `${item.quantityRemaining} left`}
                       </span>
                     )}
                   </button>

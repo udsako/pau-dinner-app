@@ -162,3 +162,34 @@ export interface DispatchResponse {
   summary: BatchSummaryItem[];
   assignedWaiter?: string;
 }
+
+// ─── Movie Night Types ────────────────────────────────────────────────────────
+
+export interface MovieMenuItem {
+  id: string;
+  name: string;
+  description?: string;
+  quantity: number;
+  quantityReserved: number;
+  quantityRemaining: number;
+  isAvailable: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MovieOrder {
+  id: string;
+  studentName: string;
+  department: string;
+  confirmedItems: string[];
+  orderedAt: string;
+  items?: MovieMenuItem[];
+}
+
+export interface MovieOrderSubmitResponse {
+  orderId: string;
+  studentName: string;
+  department: string;
+  confirmedItems: string[];
+  message: string;
+}
