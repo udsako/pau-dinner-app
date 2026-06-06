@@ -7,7 +7,6 @@ import toast from "react-hot-toast";
 import type { MenuItem, Course } from "@/types";
 import { menuAPI, ordersAPI, courseAPI } from "@/lib/api";
 
-// ─── Full Final Year Student List ─────────────────────────────────────────────
 const STUDENT_LIST = [
   "Rhoda Atoe", "Marvelous Edoho", "Toluwani BensonAjayi", "Daniella AgborAgabi",
   "Oyindamola OluOmoniyi", "Paulina Ejiofor", "Anjolajesu Ladigbolu", "Anastasia Oladokun",
@@ -71,6 +70,8 @@ const STUDENT_LIST = [
   "Farouq Sodia", "Abdulrazaq Femi-Sunmonu",
 ];
 
+const VALID_TABLES = [1,2,3,4,5,6,7,8,9,11,12,14,15,16,17,18,19,20,21,22,23,25,26,27];
+
 const COURSE_LABELS: Record<Course, { label: string; emoji: string; next: string }> = {
   STARTER: { label: "Starter", emoji: "🥗", next: "Main Course" },
   MAIN: { label: "Main Course", emoji: "🍽️", next: "Dessert" },
@@ -129,7 +130,6 @@ export default function OrderPage() {
     fetchCourses();
   }, []);
 
-  // Close suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -146,18 +146,15 @@ export default function OrderPage() {
   const handleNameChange = (value: string) => {
     setStudentName(value);
     setNameConfirmed(false);
-
     if (value.trim().length < 2) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
-
     const query = value.toLowerCase();
     const filtered = STUDENT_LIST.filter((name) =>
       name.toLowerCase().includes(query)
     ).slice(0, 6);
-
     setSuggestions(filtered);
     setShowSuggestions(filtered.length > 0);
   };
@@ -175,18 +172,15 @@ export default function OrderPage() {
 
     if (!name) { toast.error("Please enter your full name."); return; }
 
-    // Validate name is on the list
-    const isOnList = STUDENT_LIST.some(
-      (s) => s.toLowerCase() === name.toLowerCase()
-    );
+    const isOnList = STUDENT_LIST.some((s) => s.toLowerCase() === name.toLowerCase());
     if (!isOnList) {
       toast.error("Your name was not found on the final year list. Please select your full name from the dropdown.", { duration: 4000 });
       setNameConfirmed(false);
       return;
     }
 
-    if (!tableNumber || isNaN(tableNum) || tableNum < 1 || tableNum > 24) {
-      toast.error("Please enter a valid table number (1–24)."); return;
+    if (!tableNumber || isNaN(tableNum) || !VALID_TABLES.includes(tableNum)) {
+      toast.error("Please enter a valid table number."); return;
     }
 
     setCheckingStatus(true);
@@ -299,7 +293,6 @@ export default function OrderPage() {
     <main style={{ minHeight: "100vh", background: "radial-gradient(ellipse at top, #1e1650 0%, #0d0826 70%)", padding: "0 0 60px" }}>
       <div style={{ height: "3px", background: "linear-gradient(90deg, transparent, #c9a84c, #e8c97e, #c9a84c, transparent)" }} />
 
-      {/* Header */}
       <div style={{ textAlign: "center", padding: "40px 20px 32px" }}>
         <p style={{ fontSize: "0.7rem", letterSpacing: "0.25em", textTransform: "uppercase", color: "#c9a84c", marginBottom: "8px" }}>
           Pan-Atlantic University · Final Year Dinner
@@ -343,7 +336,6 @@ export default function OrderPage() {
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
 
-              {/* Name field with autocomplete */}
               <div>
                 <label className="label">Your Full Name *</label>
                 <div style={{ position: "relative" }}>
@@ -354,18 +346,11 @@ export default function OrderPage() {
                     placeholder="Start typing your name..."
                     value={studentName}
                     onChange={(e) => handleNameChange(e.target.value)}
-                    onFocus={() => {
-                      if (suggestions.length > 0) setShowSuggestions(true);
-                    }}
+                    onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                     autoComplete="off"
-                    style={{
-                      outline: nameConfirmed
-                        ? "1.5px solid rgba(52,211,153,0.6)"
-                        : undefined,
-                    }}
+                    style={{ outline: nameConfirmed ? "1.5px solid rgba(52,211,153,0.6)" : undefined }}
                   />
 
-                  {/* Confirmed tick */}
                   {nameConfirmed && (
                     <div style={{
                       position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
@@ -378,32 +363,23 @@ export default function OrderPage() {
                     </div>
                   )}
 
-                  {/* Suggestions dropdown */}
                   {showSuggestions && suggestions.length > 0 && (
-                    <div
-                      ref={suggestionsRef}
-                      style={{
-                        position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-                        background: "#160f3a", border: "1px solid rgba(201,168,76,0.3)",
-                        borderRadius: "8px", marginTop: "4px",
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-                        overflow: "hidden",
-                      }}
-                    >
+                    <div ref={suggestionsRef} style={{
+                      position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                      background: "#160f3a", border: "1px solid rgba(201,168,76,0.3)",
+                      borderRadius: "8px", marginTop: "4px",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.4)", overflow: "hidden",
+                    }}>
                       {suggestions.map((name) => (
                         <button
                           key={name}
-                          onMouseDown={(e) => {
-                            e.preventDefault(); // prevent blur before click
-                            handleSelectSuggestion(name);
-                          }}
+                          onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(name); }}
                           style={{
                             display: "block", width: "100%", textAlign: "left",
                             padding: "12px 16px", background: "transparent", border: "none",
                             cursor: "pointer", color: "#f5f0e8", fontSize: "0.9rem",
                             borderBottom: "1px solid rgba(255,255,255,0.05)",
-                            fontFamily: "var(--font-body)",
-                            transition: "background 0.15s",
+                            fontFamily: "var(--font-body)", transition: "background 0.15s",
                           }}
                           onMouseOver={(e) => (e.currentTarget.style.background = "rgba(201,168,76,0.12)")}
                           onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
@@ -415,7 +391,6 @@ export default function OrderPage() {
                   )}
                 </div>
 
-                {/* Hint text */}
                 {studentName.length > 1 && !nameConfirmed && (
                   <p style={{ fontSize: "0.72rem", color: "#e05252", marginTop: "6px" }}>
                     ⚠ Please select your name from the dropdown. Only registered final year students can order.
@@ -430,12 +405,20 @@ export default function OrderPage() {
 
               <div>
                 <label className="label">Table Number *</label>
-                <input className="input-field" type="number" min="1" max="24" placeholder="1 – 24" value={tableNumber}
+                <input
+                  className="input-field"
+                  type="number"
+                  min="1"
+                  max="27"
+                  placeholder="e.g. 5, 12, 25"
+                  value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && checkStudentStatus()} />
+                  onKeyDown={(e) => e.key === "Enter" && checkStudentStatus()}
+                />
                 <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginTop: "6px" }}>Your table number is on your place card 🪧</p>
               </div>
             </div>
+
             <button className="btn-gold" onClick={checkStudentStatus} disabled={checkingStatus || !nameConfirmed}
               style={{ width: "100%", padding: "14px", opacity: (checkingStatus || !nameConfirmed) ? 0.6 : 1 }}>
               {checkingStatus ? "Checking..." : "Continue →"}
