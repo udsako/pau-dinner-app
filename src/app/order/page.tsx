@@ -1,11 +1,75 @@
 "use client";
 // src/app/order/page.tsx
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { MenuItem, Course } from "@/types";
 import { menuAPI, ordersAPI, courseAPI } from "@/lib/api";
+
+// ─── Full Final Year Student List ─────────────────────────────────────────────
+const STUDENT_LIST = [
+  "Rhoda Atoe", "Marvelous Edoho", "Toluwani BensonAjayi", "Daniella AgborAgabi",
+  "Oyindamola OluOmoniyi", "Paulina Ejiofor", "Anjolajesu Ladigbolu", "Anastasia Oladokun",
+  "Oluwatofunmi Oyewunmi", "Nneoma Ekechi", "Omokafe Akpe", "Oluwaseun Kasunmu",
+  "Anyanwor Chukwuemeka", "Neme Delvin", "Emmanuel IbikunleAina", "Oluseye AjoseAdeogun",
+  "Sheriffdeen Sheriff", "Zebada BenjaminsLaniyi", "Oluwasayo Olageshin", "Ibukunoluwa Oguntuga",
+  "Oluwalonimi Oloyede", "Joseph Oigbochie", "Donald Ohanugo", "Clinton Okpara",
+  "Ndifrekeabasi Etukudoh", "Mirireoluwa Olukanni", "Faheema Abdulaziz", "Abdulmalik Memud",
+  "Chibuikem Okpala", "Ifeoluwa Efunbote", "Alhameen Mohammed", "Teslim Mohammed",
+  "Olatunde Sanusi", "Collins Anyoha", "Omobonikeoluwa SegunShelleh", "Ofuche Ajah",
+  "Emmanuel Odey", "Chioma Arinze", "Paul Ekwueme", "Debola Faseluka",
+  "Peter Ekwueme", "Samuel Ajayi", "Chidera Nwanze", "RehwaOma Chikere",
+  "Dorcas Elijah", "David Ohanwadi", "Grace Ezulu", "Jasmine Omeike",
+  "Nolan Ogbuagu", "Charlyn Ukpere", "Oluwatishe Oluwaseun", "Osagie Osazuwa",
+  "Oladimeji Abaniwonnda", "Mfonabasi Umoh", "Femi Totoyi", "Adetunbi Adeniyi",
+  "Betse Unaam", "Tamilore Banjo", "Sharon Aguiyi", "Abdullah Allison",
+  "Joshua Akpe", "Etomchukwu BobbyUmeano", "Nelson Edih", "Abdur-Rahman Salami",
+  "Moyosoreoluwa Adeniyi", "Onyinye Okoji", "Blessing Sako", "Andikan NtiaJames",
+  "Chidinma Ugwuogbe", "Ayanfeoluwanimi Oladapo", "Michael Atuorah", "Benjamin David",
+  "Toluwaninse Odewabi", "Oluwawemimo Olayiwola", "Chukwunkemka Nwagbara", "Daniella Ogunlana",
+  "Alheri OlayebiEdward", "Anthonia Origho", "Michael Okeke", "Oluwadamilola Oyewole",
+  "Chioma Osuji", "Ifunanya Egwuatu", "Iretemide Oke", "Ighodalo Aimankhu",
+  "Ayomide Ojikutu", "Paulette PacksonEnajerho", "Irene Dim", "Chiazo Ugwu",
+  "Daniel Ogah", "Onyinyechi Godwin", "Godsgift Ifeanyi", "Anthony Ibuzo",
+  "Opemipo Ashiru", "Yemoghor Ifesemen", "Funke Tayo", "Jennifer Nwachukwu",
+  "Giovanni Abanum", "Frances Ugwumadu", "Ibukunoluwa Afolabi", "Chukwuma Ngwoke",
+  "Deborah Dossou", "Olivia Ezeh", "Ekenedilichukwu Ubah", "Ayomikun Owope",
+  "Chiamaka Mba", "Oreoluwa Temitayo", "Emmanuella Ojadi", "Aaleeyah Tella",
+  "Manuela Manuel", "Elvis Ebenuwah", "Favour Olisa", "Ebehiroboi Adagbasa",
+  "Evelyn Nwaonumah", "Meymunah Olajobi", "Nicholas Iheanacho", "Joshua Asekhauno",
+  "Kamilah Salami", "Henry Nwachukwu", "Makuochukwu Ilekuba", "Henry Okwudili",
+  "Oyichi Ugwunweze", "Somtochukwu Ujunwa", "Sarat Mustapha", "Zedeka Icha",
+  "Nusirat Abdulrazaq", "Rehannat Abiodun", "Oluwatosin Obisanya", "Chizzy Okafor",
+  "Toni Ikube", "Eghoghokose Oguns", "Airat Olanrewaju", "Blossom Abone",
+  "Ayanfeoluwa Oyetunji", "Muizah Apampa", "Mardiyyah Apampa", "Francisca Nkafor",
+  "Nneoma Osuji", "Larrissa Udeani", "Sophia PoBariSoter", "Vivian Abah",
+  "Toluwanimi Adeyemo", "Malinna Onuorah", "Sharon Yakubu", "Ebubechi Ohabuike",
+  "Nnaemeka Opara", "Aiwanose Ojeaga", "Stephanie Barnabas", "Victor Kpajie",
+  "Ruth Olotu", "Derin Adesina", "Faiza Sanni", "Azeeza Runmonkun",
+  "Zarah Osaretin", "Precious Itodo", "Oselumese Agbonrofo", "Cynthia Isaacs",
+  "Chibusonma Obinna-Dike", "Adefolarin Lipede", "Ibukunoluwa Adeshina", "Moyinoluwa Adeyeri",
+  "Precious Ivie Eremionkhale", "Awele Chizim", "Victoria Bewaji", "Samira Tswanya",
+  "Deborah Oluwagbemiga", "Enoabasi Akpata", "Chelsea Ogunyemi", "Paula Irabor",
+  "Nmesomachukwu Onyeka", "Leelabari TombariMenegbo", "Ekenedirichukwu Akabogu", "Teniola Tedlance",
+  "Temitope Sadiq", "Kemnachi UbaDike", "Alicia Apeh", "Baridule TombariMenegbo",
+  "Anita Iye-Osagie", "Chukwudalu Orafu", "Emmanuella Nnaemeka", "Kosisochukwu Ajufo",
+  "Moses Onerhime", "Maryann Omoregbe", "Jaachimma AmadiObi", "Zeal Afolabi",
+  "Eseabasi Ukwat", "Olaoluwakiishi Lewis", "Therese Mbama", "Munachim Ezeani",
+  "Oghosa Onaghinon", "Daniel Umoru", "Liliana Amaefuna", "Tife Shote",
+  "Somtochukwu Onodingene", "Kaosi Okwuadi", "Oseremen Ebare", "Aishah Bakare",
+  "Sore Oliwo", "Adebare Adesokan", "David Udenkwo", "Moyo Junaid",
+  "Basit Inaolaji", "Christopher Amaechi", "Tobechukwu Ofili", "Ifedayo Osinowo",
+  "Kosisochukwu Nebolisa", "Esther Akindele", "Chinemerem Nnadi", "Solisama Anyanwu-ndulewe",
+  "Lotachi Okpareke", "Ifeoluwa Durotimi", "Kimberly Esekody", "Chini Akalonu",
+  "Uchechukwu ObiOkafor", "Feyi Ajuwape", "Ajisomo Ayeni", "Oluwatamilore Adeyemi",
+  "Ayoade Marzooq Rotimi", "Onyedika Igwe Stanley", "Anita Ashade", "Divine Chidera Ndukwe",
+  "Tioluwani Ige-Jones", "Adanna Favour Ohakwe", "Chinemerem David Ugo-nwosu", "Babajide Arogundade",
+  "Pius Ndukwu", "Oseiga Osara", "Omowonuola Adekaka", "Ang Ogeleka",
+  "Fuad Sodia", "Precious Uwadone", "Tomilola Ojosipe", "Kamsy Ben Ugwu",
+  "Dieko Afolayan", "Jason Edoho", "Gabriella AgborAgabi", "Eniola Isola",
+  "Farouq Sodia", "Abdulrazaq Femi-Sunmonu",
+];
 
 const COURSE_LABELS: Record<Course, { label: string; emoji: string; next: string }> = {
   STARTER: { label: "Starter", emoji: "🥗", next: "Main Course" },
@@ -19,6 +83,12 @@ export default function OrderPage() {
   const router = useRouter();
 
   const [studentName, setStudentName] = useState("");
+  const [nameConfirmed, setNameConfirmed] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
   const [tableNumber, setTableNumber] = useState("");
   const [specialNotes, setSpecialNotes] = useState("");
   const [menu, setMenu] = useState<Record<string, MenuItem[]>>({});
@@ -36,7 +106,6 @@ export default function OrderPage() {
     const fetchCourses = async () => {
       try {
         const courseRes: any = await courseAPI.getActive();
-        // Guard: handle both { openCourses: [...] } and direct array
         const courses = Array.isArray(courseRes)
           ? courseRes
           : Array.isArray(courseRes?.openCourses)
@@ -45,7 +114,10 @@ export default function OrderPage() {
         setOpenCourses(courses);
         const savedName = localStorage.getItem("pau_dinner_name");
         const savedTable = localStorage.getItem("pau_dinner_table");
-        if (savedName) setStudentName(savedName);
+        if (savedName && STUDENT_LIST.some(s => s.toLowerCase() === savedName.toLowerCase())) {
+          setStudentName(savedName);
+          setNameConfirmed(true);
+        }
         if (savedTable) setTableNumber(savedTable);
       } catch {
         toast.error("Failed to load. Please refresh.");
@@ -57,11 +129,62 @@ export default function OrderPage() {
     fetchCourses();
   }, []);
 
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+        nameInputRef.current && !nameInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleNameChange = (value: string) => {
+    setStudentName(value);
+    setNameConfirmed(false);
+
+    if (value.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const query = value.toLowerCase();
+    const filtered = STUDENT_LIST.filter((name) =>
+      name.toLowerCase().includes(query)
+    ).slice(0, 6);
+
+    setSuggestions(filtered);
+    setShowSuggestions(filtered.length > 0);
+  };
+
+  const handleSelectSuggestion = (name: string) => {
+    setStudentName(name);
+    setNameConfirmed(true);
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
   const checkStudentStatus = async () => {
     const name = studentName.trim();
     const tableNum = parseInt(tableNumber);
 
     if (!name) { toast.error("Please enter your full name."); return; }
+
+    // Validate name is on the list
+    const isOnList = STUDENT_LIST.some(
+      (s) => s.toLowerCase() === name.toLowerCase()
+    );
+    if (!isOnList) {
+      toast.error("Your name was not found on the final year list. Please select your full name from the dropdown.", { duration: 4000 });
+      setNameConfirmed(false);
+      return;
+    }
+
     if (!tableNumber || isNaN(tableNum) || tableNum < 1 || tableNum > 24) {
       toast.error("Please enter a valid table number (1–24)."); return;
     }
@@ -198,14 +321,12 @@ export default function OrderPage() {
 
       <div style={{ maxWidth: "560px", margin: "0 auto", padding: "0 20px" }}>
 
-        {/* Loading */}
         {loading && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: "80px", borderRadius: "12px" }} />)}
           </div>
         )}
 
-        {/* Ordering closed */}
         {!loading && (openCourses || []).length === 0 && (
           <div className="card" style={{ padding: "48px", textAlign: "center" }}>
             <p style={{ fontSize: "3rem", marginBottom: "16px" }}>⏸</p>
@@ -215,19 +336,98 @@ export default function OrderPage() {
           </div>
         )}
 
-        {/* Step 1: Name + Table entry */}
         {!loading && (openCourses || []).length > 0 && !nameEntered && (
           <div className="card" style={{ padding: "28px", marginBottom: "20px" }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", color: "#e8c97e", marginBottom: "20px" }}>
               Enter your details
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
+
+              {/* Name field with autocomplete */}
               <div>
                 <label className="label">Your Full Name *</label>
-                <input className="input-field" type="text" placeholder="e.g. Adaeze Okonkwo" value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && checkStudentStatus()} />
+                <div style={{ position: "relative" }}>
+                  <input
+                    ref={nameInputRef}
+                    className="input-field"
+                    type="text"
+                    placeholder="Start typing your name..."
+                    value={studentName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    onFocus={() => {
+                      if (suggestions.length > 0) setShowSuggestions(true);
+                    }}
+                    autoComplete="off"
+                    style={{
+                      outline: nameConfirmed
+                        ? "1.5px solid rgba(52,211,153,0.6)"
+                        : undefined,
+                    }}
+                  />
+
+                  {/* Confirmed tick */}
+                  {nameConfirmed && (
+                    <div style={{
+                      position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                      width: "20px", height: "20px", borderRadius: "50%",
+                      background: "#34d399", display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="#0d0826" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Suggestions dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div
+                      ref={suggestionsRef}
+                      style={{
+                        position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                        background: "#160f3a", border: "1px solid rgba(201,168,76,0.3)",
+                        borderRadius: "8px", marginTop: "4px",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {suggestions.map((name) => (
+                        <button
+                          key={name}
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // prevent blur before click
+                            handleSelectSuggestion(name);
+                          }}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left",
+                            padding: "12px 16px", background: "transparent", border: "none",
+                            cursor: "pointer", color: "#f5f0e8", fontSize: "0.9rem",
+                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            fontFamily: "var(--font-body)",
+                            transition: "background 0.15s",
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = "rgba(201,168,76,0.12)")}
+                          onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Hint text */}
+                {studentName.length > 1 && !nameConfirmed && (
+                  <p style={{ fontSize: "0.72rem", color: "#e05252", marginTop: "6px" }}>
+                    ⚠ Please select your name from the dropdown. Only registered final year students can order.
+                  </p>
+                )}
+                {nameConfirmed && (
+                  <p style={{ fontSize: "0.72rem", color: "#34d399", marginTop: "6px" }}>
+                    ✓ Name verified — you're on the list!
+                  </p>
+                )}
               </div>
+
               <div>
                 <label className="label">Table Number *</label>
                 <input className="input-field" type="number" min="1" max="24" placeholder="1 – 24" value={tableNumber}
@@ -236,17 +436,20 @@ export default function OrderPage() {
                 <p style={{ fontSize: "0.75rem", color: "#9b93b0", marginTop: "6px" }}>Your table number is on your place card 🪧</p>
               </div>
             </div>
-            <button className="btn-gold" onClick={checkStudentStatus} disabled={checkingStatus}
-              style={{ width: "100%", padding: "14px", opacity: checkingStatus ? 0.7 : 1 }}>
+            <button className="btn-gold" onClick={checkStudentStatus} disabled={checkingStatus || !nameConfirmed}
+              style={{ width: "100%", padding: "14px", opacity: (checkingStatus || !nameConfirmed) ? 0.6 : 1 }}>
               {checkingStatus ? "Checking..." : "Continue →"}
             </button>
+            {!nameConfirmed && studentName.length === 0 && (
+              <p style={{ textAlign: "center", fontSize: "0.72rem", color: "#9b93b0", marginTop: "10px" }}>
+                Type your name to see suggestions
+              </p>
+            )}
           </div>
         )}
 
-        {/* Step 2: Show menu or status */}
         {!loading && nameEntered && (
           <>
-            {/* Student info strip */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", padding: "12px 16px", background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "10px" }}>
               <div>
                 <p style={{ fontWeight: 500, color: "#f5f0e8", marginBottom: "2px" }}>{studentName}</p>
@@ -258,7 +461,6 @@ export default function OrderPage() {
               </button>
             </div>
 
-            {/* Already ordered badges */}
             {(orderedCourses || []).length > 0 && (
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "16px" }}>
                 {(orderedCourses || []).map((c) => (
@@ -269,7 +471,6 @@ export default function OrderPage() {
               </div>
             )}
 
-            {/* No available course */}
             {!currentCourse && (() => {
               const msg = getStatusMessage();
               return (
@@ -281,7 +482,6 @@ export default function OrderPage() {
               );
             })()}
 
-            {/* Order form */}
             {currentCourse && (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", padding: "10px 16px", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "10px" }}>
